@@ -22,7 +22,9 @@
       "resources": [
         "js/defaultSettings.js",
         "js/main.js",
-        "index.html"
+        "index.html",
+        "import.html",
+        "js/import.js"
       ],
       "matches": [
         "<all_urls>"
@@ -43,7 +45,8 @@
 
   "permissions": [
     "storage",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>"

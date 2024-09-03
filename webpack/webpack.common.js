@@ -12,6 +12,7 @@ module.exports = {
       content: path.join(srcDir, 'content_script.js'),
       main: path.join(srcDir, 'main.jsx'),
       index: path.join(srcDir, 'index.tsx'),
+      import: path.join(srcDir, 'import.js'),
     },
     output: {
         path: path.join(__dirname, "../dist/js"),

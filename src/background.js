@@ -125,12 +125,44 @@ function setPopup(curPanelPosition = false) {
   lastPanelPosition = curPanelPosition
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'interceptedRequest') {
-    // Relay the intercepted request to the popup
-    chrome.runtime.sendMessage(message);
-  } else if (message.type === 'updateRules') {
-    // Relay the updated rules to the content script
-    chrome.tabs.sendMessage(sender.tab.id, message);
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "importRules") {
+    chrome.tabs.create({ url: 'import.html', active: true }, (tab) => {
+      if (!tab.id) return;
+      
+      const tabId = tab.id;
+      
+      chrome.tabs.onUpdated.addListener(function listener(updatedTabId, info) {
+        if (info.status === 'complete' && updatedTabId === tabId) {
+          chrome.tabs.onUpdated.removeListener(listener);
+          
+          chrome.tabs.sendMessage(tabId, { action: "initializeImport" }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.error(chrome.runtime.lastError);
+              return;
+            }
+            
+            if (response && response.success) {
+              chrome.tabs.remove(tabId);
+              sendResponse(response);
+            }
+          });
+        }
+      });
+    });
+    
+    return true; // Indicates that the response will be sent asynchronously
   }
 });
+
+function generateUniqueId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+function buildUUID() {
+  const dt = new Date().getTime();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (dt + Math.random() * 16) % 16 | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}

@@ -386,6 +386,7 @@ window.addEventListener("message", function (event) {
     window.XMLHttpRequest = ajax_interceptor_qoweifjqon.myXHR
     window.fetch = ajax_interceptor_qoweifjqon.myFetch
   } else {
+    console.log('restore original', ajax_interceptor_qoweifjqon)
     window.XMLHttpRequest = ajax_interceptor_qoweifjqon.originalXHR
     window.fetch = ajax_interceptor_qoweifjqon.originalFetch
   }

@@ -14,8 +14,14 @@ import {
   Tabs,
   Row,
   Col,
+  Divider,
+  message,
 } from 'antd';
-import { MinusOutlined, PlusOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
+import { MinusOutlined, PlusOutlined, DeleteOutlined, ReloadOutlined, ExportOutlined } from '@ant-design/icons';
+import MonacoEditor from './components/Editor/index'
+import JSONPretty from 'react-json-pretty';
+import { FaFileExport, FaFileImport } from "react-icons/fa";
+
 
 const { Panel } = Collapse;
 const { Option } = Select;
@@ -43,9 +49,7 @@ const generateUniqueId = (): string => {
 
 const App = () => {
   const [interceptedRequests, setInterceptedRequests] = useState({});
-  const [settingModalVisible, setSettingModalVisible] = useState(false);
-  const [imageModalVisible, setImageModalVisible] = useState(false);
-  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [showAllRules, setShowAllRules] = useState(false);
   const [positionClass, setPositionClass] = useState('suspend');
   const [customFunction, setCustomFunction] = useState({ panelPosition: 0 });
   const [showRefreshTip, setShowRefreshTip] = useState(false);
@@ -65,7 +69,24 @@ const App = () => {
   useEffect(() => {
     chrome.storage.local.get(['ajaxInterceptor_switchOn', 'ajaxInterceptor_rules', 'customFunction'], (result) => {
       setSwitchOn(result.ajaxInterceptor_switchOn || false);
-      setRules(result.ajaxInterceptor_rules || []);
+
+      // Initialize default rule if no rules exist
+      if (!result.ajaxInterceptor_rules || result.ajaxInterceptor_rules.length === 0) {
+        const defaultRule: AjaxInterceptorRule = {
+          id: generateUniqueId(),
+          match: '',
+          label: 'Default Rule',
+          switchOn: true,
+          key: buildUUID(),
+          tabId: 'Default',
+        };
+        const defaultRules = [defaultRule];
+        setRules(defaultRules);
+        set('ajaxInterceptor_rules', defaultRules);
+      } else {
+        setRules(result.ajaxInterceptor_rules);
+      }
+
       setCustomFunction(result.customFunction || { panelPosition: 0 });
       setIsLoading(false);
     });
@@ -181,6 +202,20 @@ const App = () => {
       set('ajaxInterceptor_rules', newRules);
       return newRules;
     });
+  };
+
+  const handleExportRules = () => {
+    const rulesForExport = rules.map(rule => ({
+      ...rule,
+      overrideTxt: typeof rule.overrideTxt === 'string' ? JSON.parse(rule.overrideTxt) : rule.overrideTxt,
+    }));
+    const dataStr = JSON.stringify(rulesForExport, null, 2);
+    const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`;
+    const exportFileDefaultName = 'ajax_interceptor_rules.json';
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
   };
 
   const handleFilterTypeChange = (val, ruleId) => {
@@ -339,7 +374,7 @@ const App = () => {
           const newLocal = (
             <>
               <Collapse
-                className={switchOn ? 'collapse' : 'collapse collapse-hidden'}
+                className='collapse'
                 onChange={handleCollaseChange}
               >
                 {renderRules(filteredRules)}
@@ -347,8 +382,7 @@ const App = () => {
 
               <Button
                 size="large"
-                className={`btn-add ${switchOn ? '' : ' btn-add-hidden'
-                  }`}
+                className='btn-add'
                 type="primary"
                 onClick={() => handleClickAdd(tabId)}
                 disabled={!switchOn}
@@ -381,44 +415,6 @@ const App = () => {
     );
   };
 
-  // (([tabId, rules]) => {
-  //   const filteredRules = rules.filter(rule => searchName ? rule.label.indexOf(searchName) > -1 : true).filter(rule => searchUrl ? rule.match.indexOf(searchUrl) > -1 : true)
-  //   console.log(rules, searchName, searchUrl, filteredRules)
-
-  //   return (
-  //     <Tabs.TabPane
-  //       tab={
-  //         <>
-  //           {tabId} &nbsp;&nbsp;
-  //           <Badge
-  //             className="site-badge-count-109"
-  //           count={filteredRules.length}
-  //           style={{ backgroundColor: '#52c41a' }}
-  //           />
-  //         </>
-  //       }
-  //     key={tabId}>
-
-  //     <Collapse
-  //       className={switchOn ? 'collapse' : 'collapse collapse-hidden'}
-  //       onChange={handleCollaseChange}
-  //     >
-  //     {renderRules(filteredRules)}
-  //     </Collapse>
-  //     <Button
-  //       size="large"
-  //       className={`btn-add ${
-  //         switchOn ? '' : ' btn-add-hidden'
-  //       }`}
-  //       type="primary"
-  //       onClick={() => handleClickAdd(tabId)}
-  //       disabled={!switchOn}
-  //     >
-  //       <PlusOutlined />
-  //     </Button>
-  //   </Tabs.TabPane>
-  //   )
-  // )
   const renderRules = (rules: AjaxInterceptorRule[]) => {
     return rules.map((rule) => (
       <Panel key={rule.key} header={renderPanelHeader(rule)}>
@@ -560,8 +556,8 @@ const App = () => {
     <div style={{
       textAlign: 'center',
       position: 'sticky',
-      top: 0, 
-      zIndex: 10, 
+      top: 0,
+      zIndex: 10,
       background: 'white',
       paddingBottom: 10,
     }}>
@@ -595,6 +591,13 @@ const App = () => {
               type="primary"
               icon={<PlusOutlined />}
               onClick={() => handleClickAdd(newTabName || generateRandomString(5))}
+            />
+            <Button
+              type="primary"
+              icon={<FaFileExport style={{
+                marginBottom: -1
+              }} />}
+              onClick={() => handleExportRules()}
             />
           </Space.Compact>
         </div>
@@ -633,9 +636,22 @@ const App = () => {
   return (
     <div className="ajax-modifier-main">
       {renderHeader()}
-      <div className={switchOn ? 'setting-body' : 'setting-body setting-body-hidden'}>
-        {renderTabs()}
-      </div>
+      {
+        showAllRules && (
+          <div>
+            <JSONPretty data={rules} />
+            <Divider />
+            <JSONPretty data={dataList} />
+          </div>
+        )
+      }
+      {
+        !showAllRules && (
+          <div className='setting-body'>
+            {renderTabs()}
+          </div>
+        )
+      }
     </div>
   );
 };
