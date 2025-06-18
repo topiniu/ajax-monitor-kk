@@ -16,6 +16,7 @@ import {
   Col,
   Divider,
   message,
+  Upload,
 } from 'antd';
 import { MinusOutlined, PlusOutlined, DeleteOutlined, ReloadOutlined, ExportOutlined } from '@ant-design/icons';
 import MonacoEditor from './components/Editor/index'
@@ -126,6 +127,38 @@ const App = () => {
     chrome.runtime.onMessage.addListener(handleIncomingMessage);
   };
 
+  const uploadProps: any = {
+    name: 'file',
+    action: '#',
+    accept: '.json',
+    beforeUpload(file) {
+      alert('beforeUpload');
+      console.log(file);
+
+      // get json database
+      const jsonDatabase = file;
+      console.log(jsonDatabase);
+      // replace rules
+      setRules(jsonDatabase);
+      // set to storage
+      set('ajaxInterceptor_rules', jsonDatabase);
+      // group rules by tab
+      groupRulesByTab();
+      return false;
+    },
+    onChange(info) {
+      if (info.file.status !== 'uploading') {
+        console.log(info.file, info.fileList);
+      }
+      if (info.file.status === 'done') {
+        message.success(`${info.file.name} file uploaded successfully`);
+
+      } else if (info.file.status === 'error') {
+        message.error(`${info.file.name} file upload failed.`);
+      }
+    },
+  }
+
   const handleIncomingMessage = useCallback(({
     type,
     to,
@@ -216,6 +249,10 @@ const App = () => {
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
     linkElement.click();
+  };
+
+  const handleImportRules = () => {
+    console.log('handleImportRules');
   };
 
   const handleFilterTypeChange = (val, ruleId) => {
@@ -599,6 +636,15 @@ const App = () => {
               }} />}
               onClick={() => handleExportRules()}
             />
+            {/* <a href='./popup.html' target='_blank'>open popup</a> */}
+            <Upload {...uploadProps}>
+              <Button
+                type="primary"
+                icon={<FaFileImport style={{
+                  marginBottom: -1
+                }} />}
+              />
+            </Upload>
           </Space.Compact>
         </div>
         <div style={{
@@ -634,26 +680,10 @@ const App = () => {
   }
 
   return (
-    <div className="ajax-modifier-main">
-      {renderHeader()}
-      {
-        showAllRules && (
-          <div>
-            <JSONPretty data={rules} />
-            <Divider />
-            <JSONPretty data={dataList} />
-          </div>
-        )
-      }
-      {
-        !showAllRules && (
-          <div className='setting-body'>
-            {renderTabs()}
-          </div>
-        )
-      }
-    </div>
-  );
+    <Button onClick={() => {
+      window.open('./mainpanel.html', '_blank');
+    }}>open popup</Button>
+  )
 };
 
 const root = createRoot(document.getElementById("root")!);

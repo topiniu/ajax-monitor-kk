@@ -36,11 +36,12 @@ const Replacer: React.FC<ReplacerProps> = ({ updateAddBtnTop_interval, ruleId, s
   const updateRule = (updatedFields: Partial<AjaxInterceptorRule>) => {
     const ruleIndex = rules.findIndex(rule => rule.id === ruleId);
     if (ruleIndex !== -1) {
-      rules[ruleIndex] = {
-        ...rules[ruleIndex],
+      const updatedRules = [...rules];
+      updatedRules[ruleIndex] = {
+        ...updatedRules[ruleIndex],
         ...updatedFields
       };
-      set('ajaxInterceptor_rules', rules);
+      set('ajaxInterceptor_rules', updatedRules);
     }
   };
 
