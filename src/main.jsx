@@ -1,3 +1,4 @@
+const AJAX_MODIFIER_KK_PANEL_DATA = []
 // 命名空间
 let ajax_interceptor_qoweifjqon = {
   settings: {
@@ -7,11 +8,10 @@ let ajax_interceptor_qoweifjqon = {
   },
   // 获取匹配到的规则项
   getMatchedInterface: ({ thisRequestUrl = '', thisMethod = '' }) => {
-    console.log('thisRequestUrl', thisRequestUrl)
-    console.log('thisMethod', thisMethod)
-    console.log('ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules', ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules)
     return ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules.find(item => {
-      const { filterType = 'normal', limitMethod = 'ALL', switchOn = true, match } = item
+      let { filterType = 'normal', limitMethod = 'ALL', switchOn = true, match } = item
+      // remove \n if match has it in the end
+      match = match?.replace(/\n$/, '')
       const matchedMethod = thisMethod === limitMethod || limitMethod === 'ALL'
       const matchedRequest = (filterType === 'normal' && thisRequestUrl === match) ||
         (filterType === 'regex' && thisRequestUrl.match(new RegExp(match, 'i')))
@@ -37,7 +37,7 @@ let ajax_interceptor_qoweifjqon = {
     keyValueArr.forEach((item) => {
       // 保证中间不会把=给忽略掉
       const itemArr = item.replace('=', '〓').split('〓');
-      const itemObj = {[itemArr[0]]: itemArr[1]};
+      const itemObj = { [itemArr[0]]: itemArr[1] };
       keyValueObj = Object.assign(keyValueObj, itemObj);
     });
     return keyValueObj;
@@ -54,7 +54,7 @@ let ajax_interceptor_qoweifjqon = {
       if (url.startsWith("./") || url.startsWith("../")) {
         // 相对路由
         url = new URL(url, currentUrl).href
-      }else if (url.startsWith("//")) {
+      } else if (url.startsWith("//")) {
         // 只缺少协议，补全协议
         url = protocol + url
       } else {
@@ -68,13 +68,14 @@ let ajax_interceptor_qoweifjqon = {
   myXHR: function () {
     let pageScriptEventDispatched = false
     const modifyResponse = () => {
-      console.log(this)
       const [method, requestUrl] = this._openArgs
       const queryParams = ajax_interceptor_qoweifjqon.getRequestParams(requestUrl)
       const [requestPayload] = this._sendArgs
       const matchedInterface = this._matchedInterface
-      console.log('matchedInterface', matchedInterface)
+      console.log('【Ajax Modifier in xhr】matchedInterface', matchedInterface)
       if (matchedInterface && (matchedInterface.overrideTxt || matchedInterface.overrideResponseFunc)) {
+        AJAX_MODIFIER_KK_PANEL_DATA.push(matchedInterface)
+        updateFloatPanelContent()
         const { overrideTxt, overrideResponseFunc, match, isExpert = false } = matchedInterface
         let overrideResponse = undefined
         let overrideStatus = undefined
@@ -175,7 +176,7 @@ let ajax_interceptor_qoweifjqon = {
       } else if (attr === 'setRequestHeader') {
         this.setRequestHeader = (...args) => {
           // get headers
-          this._headerArgs = this._headerArgs ? Object.assign(this._headerArgs, {[args[0]]: args[1]}) : {[args[0]]: args[1]};
+          this._headerArgs = this._headerArgs ? Object.assign(this._headerArgs, { [args[0]]: args[1] }) : { [args[0]]: args[1] };
           const matchedInterface = this._matchedInterface;
           if (!(matchedInterface && matchedInterface.overrideHeadersFunc && matchedInterface.isExpert)) { // 没有要拦截修改或添加的header
             xhr.setRequestHeader && xhr.setRequestHeader.apply(xhr, args);
@@ -237,7 +238,7 @@ let ajax_interceptor_qoweifjqon = {
           return text;
         }
         const value = result.value; // Uint8Array
-        text += decoder.decode(value, {stream: true});
+        text += decoder.decode(value, { stream: true });
         // 读取下一个文件片段，重复处理步骤
         return reader.read().then(processData);
       };
@@ -259,6 +260,8 @@ let ajax_interceptor_qoweifjqon = {
       thisMethod: data && data.method
     })
     if (matchedInterface && args) {
+      AJAX_MODIFIER_KK_PANEL_DATA.push(matchedInterface)
+      updateFloatPanelContent()
       const { overrideHeadersFunc, overridePayloadFunc, isExpert = false } = matchedInterface;
       if (overrideHeadersFunc && isExpert && args[1]) {
         const headers = ajax_interceptor_qoweifjqon.executeStringFunction(overrideHeadersFunc, this._headerArgs, 'headers')
@@ -371,23 +374,177 @@ let ajax_interceptor_qoweifjqon = {
     })
   },
 }
-console.log('main.js')
+
+const toastMessage = (matchedInterface) => {
+  // toast a message though dom to show the matchedInterface
+  const toast = document.createElement('div')
+  toast.style.position = 'fixed'
+  toast.style.top = '10px'
+  toast.style.left = '10px'
+  toast.style.backgroundColor = 'red'
+  toast.style.color = 'white'
+  toast.style.padding = '10px'
+  toast.style.zIndex = '9999'
+  toast.style.opacity = '0.5'
+  toast.innerHTML = `[AJAx Modifier] matchedInterface: ${matchedInterface.match}`
+  document.body.appendChild(toast)
+  setTimeout(() => {
+    document.body.removeChild(toast)
+  }, 5000)
+}
+
+const controlFloatPanelButton = () => {
+  console.log('[controlFloatPanelButton]')
+  // create a button to control the float panel
+  const button = document.createElement('button')
+  button.id = 'ajax-modifier-panel-button'
+  button.innerHTML = 'Ajax KK'
+  button.style.position = 'fixed'
+  button.style.bottom = '10px'
+  button.style.right = '10px'
+  button.style.backgroundColor = '#ccd5ae'
+  button.style.color = 'white'
+  //font size
+  button.style.fontSize = '12px'
+  button.style.padding = '4px 2px'
+  //border none
+  button.style.border = 'none'
+  // shadow
+  button.style.boxShadow = '0 0 10px 0 rgba(0, 0, 0, 0.5)'
+  // hover
+  button.style.cursor = 'pointer'
+  button.style.zIndex = '9999'
+  button.addEventListener('click', () => {
+    const panel = document.getElementById('ajax-modifier-panel')
+    if (panel && panel.style.display !== 'none') {
+      // hide the panel
+      hideFloatPanel()
+    } else {
+      // show the panel
+      showFloatPanel()
+    }
+  })
+
+  document.body.appendChild(button)
+}
+
+const showFloatPanel = () => {
+  const panel = document.getElementById('ajax-modifier-panel')
+  if (panel) {
+    panel.style.display = 'block'
+    panel.style.opacity = '1'
+    panel.style.zIndex = '9999'
+  }
+}
+
+const hideFloatPanel = () => {
+  const panel = document.getElementById('ajax-modifier-panel')
+  if (panel) {
+    panel.style.display = 'none'
+    panel.style.opacity = '0'
+    panel.style.zIndex = '-1'
+  }
+}
+
+const hideFloatPanelButton = () => {
+  const button = document.getElementById('ajax-modifier-panel-button')
+  if (button) {
+    button.style.display = 'none'
+  }
+}
+const showFloatPanelButton = () => {
+  const button = document.getElementById('ajax-modifier-panel-button')
+  if (button) {
+    button.style.display = 'block'
+  }
+}
+
+const updateFloatPanelContent = () => {
+  // filter the same match
+  const uniqueMatches = [...new Set(AJAX_MODIFIER_KK_PANEL_DATA?.map(item => item.match))]
+  const h2 = document.getElementById('ajax-modifier-panel-title')
+  h2.innerHTML = `AJAx Modifier ${uniqueMatches.length}`
+  const h3Div = document.getElementById('ajax-modifier-panel-h3')
+  h3Div.innerHTML = ''
+  uniqueMatches.forEach((item) => {
+    const h3 = document.createElement('h3')
+    h3.innerHTML = `${item}`
+    h3Div.appendChild(h3)
+  })
+}
+
+const createFloatPanel = () => {
+  // if the panel already exists, update data
+  let panel = document.getElementById('ajax-modifier-panel')
+  if (panel) {
+    updateFloatPanelContent()
+    return
+  }
+  panel = document.createElement('div')
+  panel.id = 'ajax-modifier-panel'
+  panel.style.position = 'fixed'
+  panel.style.top = '10px'
+  panel.style.left = '10px'
+  panel.style.backgroundColor = '#d4a373'
+  panel.style.color = 'white'
+  panel.style.padding = '10px'
+  panel.style.zIndex = '9999'
+  panel.style.fontSize = '12px'
+  // panel.innerHTML = `[AJAx Modifier] matchedInterface: ${matchedInterface.match}`
+  const h2 = document.createElement('h2')
+  h2.id = 'ajax-modifier-panel-title'
+  h2.innerHTML = `AJAx Modifier ${AJAX_MODIFIER_KK_PANEL_DATA?.length}`
+  panel.appendChild(h2)
+
+  // put h3 into a div
+  const h3Div = document.createElement('div')
+  h3Div.id = 'ajax-modifier-panel-h3'
+  // filter the same match
+  const uniqueMatches = [...new Set(AJAX_MODIFIER_KK_PANEL_DATA?.map(item => item.match))]
+  uniqueMatches.forEach((item) => {
+    const h3 = document.createElement('h3')
+    h3.innerHTML = `${item.match}`
+    // add button to copy the matchedInterface
+    const button = document.createElement('button')
+    button.innerHTML = 'Copy'
+    button.addEventListener('click', () => {
+      navigator.clipboard.writeText(item.match)
+    })
+    h3.appendChild(button)
+    h3Div.appendChild(h3)
+  })
+  panel.appendChild(h3Div)
+
+  document.body.appendChild(panel)
+}
+
 
 window.addEventListener("message", function (event) {
-  console.log('event', event)
+
   const data = event.data
   // console.log('data from content_script main.js', data)
 
   if (data.type === 'ajaxInterceptor' && data.to === 'pageScript') {
+    console.log('data', data)
     ajax_interceptor_qoweifjqon.settings[data.key] = data.value
+
+
+    // compare if ajaxInterceptor_rules includes window.location.host
+    console.log(ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules)
+    if (ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules.some(item => item.match.includes(window.location.host))) {
+      controlFloatPanelButton()
+      createFloatPanel()
+    }
   }
 
   if (ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_switchOn) {
     window.XMLHttpRequest = ajax_interceptor_qoweifjqon.myXHR
     window.fetch = ajax_interceptor_qoweifjqon.myFetch
+    showFloatPanelButton()
   } else {
-    console.log('restore original', ajax_interceptor_qoweifjqon)
     window.XMLHttpRequest = ajax_interceptor_qoweifjqon.originalXHR
     window.fetch = ajax_interceptor_qoweifjqon.originalFetch
+    hideFloatPanelButton()
+    hideFloatPanel()
   }
 }, false)

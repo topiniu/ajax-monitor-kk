@@ -13,6 +13,7 @@ module.exports = {
       main: path.join(srcDir, 'main.jsx'),
       index: path.join(srcDir, 'index.tsx'),
       import: path.join(srcDir, 'import.js'),
+      mainpanel: path.join(srcDir, 'mainpanel.tsx'),
     },
     output: {
         path: path.join(__dirname, "../dist/js"),
