@@ -28,6 +28,9 @@ import MonacoEditor from './components/Editor/index'
 import JSONPretty from 'react-json-pretty';
 import { FaFileExport, FaFileImport } from "react-icons/fa";
 import { JsonEditor } from 'json-edit-react'
+import { BiSolidLock } from "react-icons/bi";
+import { AnimatePresence, motion } from "motion/react"
+
 
 const { Panel } = Collapse;
 const { Option } = Select;
@@ -82,7 +85,7 @@ const App = () => {
     if (tableBoxRef.current) {
       setTableBoxHeight(window.innerHeight - tableBoxRef.current.offsetTop - 34);
     }
-  }, [tableBoxRef.current]);
+  }, [tableBoxRef.current, switchOn]);
 
   const readRulesFromStorage = () => {
     return new Promise((resolve, reject) => {
@@ -731,217 +734,276 @@ const App = () => {
   };
 
   return (
+
     <Spin spinning={isLoading}>
-      <div style={{
-        width: '100%',
-        height: '100%',
-        padding: '20px',
-        boxSizing: 'border-box',
-      }}>
-        <div style={{
-          padding: '20px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-          boxSizing: 'border-box',
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}>
-          <div>
-            <Switch
-              checkedChildren="On"
-              unCheckedChildren="Off"
-              checked={switchOn}
-              onChange={handleSwitchChange}
-            />
-          </div>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-          }}>
-            <Input.Search
-              style={{
-                width: 200,
-              }}
-              placeholder="Search by name"
-              onPressEnter={handleSearch}
-            />
-            <Input.Search
-              style={{
-                width: 200,
-              }}
-              placeholder="Search by url"
-              onPressEnter={handleUrlSearch}
-            />
-            <Button style={{
-              width: 32,
-              height: 32,
-              borderRadius: 4,
-            }} color="primary" variant="filled" onClick={() => handleExportRules()} icon={<ExportOutlined />} />
-
-            <Upload {...uploadProps}>
-              <Button
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '4px',
-                }}
-                color="primary" variant="filled"
-                icon={<FaFileImport style={{
-                  marginBottom: -1
-                }} />}
-              />
-            </Upload>
-            <Button type="primary" onClick={handleAddNewRule}>
-              <PlusOutlined />
-              Add Rule
-            </Button>
-          </div>
-        </div>
-        <div
-          ref={tableBoxRef}
-          style={{
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            height: tableBoxHeight,
-            position: 'relative',
-          }}>
-          {!switchOn && (
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.1)',
-              zIndex: 1,
-              cursor: 'not-allowed',
-              pointerEvents: 'none',
-            }} />
-          )}
-          <Table
-            bordered
-            pagination={{
-              pageSize: 20,
-              total: rules.length,
-              showTotal: (total, range) => `Total: ${total}`,
-              showSizeChanger: true
-            }}
+      <AnimatePresence>
+        {!switchOn && (
+          <motion.div
+            key="lock-screen"
             style={{
-              height: tableBoxHeight,
-              opacity: switchOn ? 1 : 0.65,
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 5,
             }}
-            scroll={{ y: tableBoxHeight - 78 }}
-            size='small'
-            columns={tableColumns}
-            dataSource={rules}
-          />
-        </div>
-        <Drawer
-          maskClosable={false}
-          width={1200}
-          title={isCreating ? 'Create new rule' : 'Detail for ' + currentEditRule?.label}
-          open={showDetail}
-          onClose={() => {
-            setShowDetail(false);
-            setIsCreating(false);
-            setDuplicateMatch([]);
-          }}
-          extra={
-            <Space>
-              <Button onClick={() => setShowDetail(false)}>Cancel</Button>
-              <Button type="primary" onClick={handleUpdateRules}>
-                OK
-              </Button>
-            </Space>
-          }
-        >
-          <div style={{
-            display: 'flex',
-            gap: '10px',
-            height: '100%',
-            overflowY: 'scroll',
-          }}>
-            <div style={{
-              width: 500
-            }}>
-              <Typography.Title level={4} style={{
-                marginTop: 0
-              }}>Id:</Typography.Title>
-
-              <Space.Compact style={{
-                width: '100%',
+            // initial={{ opacity: 0, scale: 0.2 }}
+            // animate={{ opacity: 1, scale: 1 }}
+            // exit={{ opacity: 0, scale: 1.2 }}
+            // transition={{ duration: 0.5, type: "spring", stiffness: 100 }}
+          >
+            <motion.div
+              key='lock'
+              initial={{ opacity: 0, scale: 0.2 }}
+              animate={{ opacity: 1, scale: 1.5, transition: { duration: 0.5, type: "spring",delay: 0.5 }     }}
+              exit={{ opacity: 0, scale: 1.8, transition: { duration: 0.5, type: "spring",delay: 0.1 } }}
+              // transition={{ duration: 0.5, type: "spring",delay: 0.5 }}
+            >
+              <div
+                className='lock-btn' 
+                onClick={() => {
+                  setSwitchOn(true);
+                }}
+              >
+                <BiSolidLock />
+              </div>
+            </motion.div>
+            <motion.div
+              key='lock-text'
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0, transition: { duration: 0.3, type: "spring",delay: 0.8 } }}
+              exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring",delay: 0 } }}
+              // transition={{ duration: 0.3, type: "spring",delay: 0.8 }}
+            >
+              <p style={{ fontSize: 16, fontStyle: 'italic', color: '#999' }}>Click to enable monitor</p>
+            </motion.div>
+          </motion.div>
+        )}
+        
+        {switchOn && (
+          <motion.div
+            key="main-content"
+            style={{
+              width: '100%',
+              height: '100%',
+              padding: '20px',
+              boxSizing: 'border-box',
+              position: 'relative',
+            }}
+            // initial={{ opacity: 0, y: 20 }}
+            // animate={{ opacity: 1, y: 0, transition: { duration: 0.5, type: "spring" } }}
+            // exit={{ opacity: 0, y: -20, transition: { duration: 0.3, type: "spring",delay: 0 } }}
+            // transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
+          >
+            <motion.div
+              key='header-box'
+             style={{  
+              padding: '20px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              boxSizing: 'border-box',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0, transition: { duration: 0.5, type: "spring", delay: 0.5 } }}
+            exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring", delay: 0.3 } }}
+            // transition={{ duration: 0.3, type: "spring",delay: 1.5 }}
+            >
+              <div>
+                <Switch
+                  checkedChildren="On"
+                  unCheckedChildren="Off"
+                  checked={switchOn}
+                  onChange={handleSwitchChange}
+                />
+              </div>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
               }}>
-                <Input
+                <Input.Search
                   style={{
-                    marginBottom: '10px',
+                    width: 200,
                   }}
-                  disabled
-                  value={currentEditRule?.id || ''}
+                  placeholder="Searchss by name"
+                  onPressEnter={handleSearch}
                 />
-                <Button type="primary" icon={<CopyOutlined />} onClick={() => {
-                  navigator.clipboard.writeText(currentEditRule?.id || '');
-                  message.success('Copied to clipboard');
-                }}></Button>
-              </Space.Compact>
-              <Typography.Title level={4}>Label:</Typography.Title>
-              <Input
-                style={{
-                  marginBottom: '10px',
-                }}
-                value={currentEditRule?.label || ''}
-                onChange={(e) => {
-                  if (currentEditRule) {
-                    setCurrentEditRule({ ...currentEditRule, label: e.target.value });
-                  }
-                }}
-              />
-              <Typography.Title level={4}>Match:</Typography.Title>
-              <Input.TextArea
-                rows={10}
-                style={{
-                  marginBottom: '10px',
-                }}
-                onBlur={checkDuplicateMatch}
-                value={currentEditRule?.match || ''}
-                onChange={(e) => {
-                  if (currentEditRule) {
-                    setCurrentEditRule({ ...currentEditRule, match: e.target.value });
-                  }
-                }}
-              />
-              {duplicateMatch.length > 0 && isCreating && (
-                <Collapse
-                  size="small"
-                  defaultActiveKey={['1']}
-                  items={[{
-                    key: '1', label: 'Duplicate match: ' + duplicateMatch.length, children: <>
-                      {duplicateMatch.map(rule => (
-                        <Typography.Text
-                          className='duplicate-match'
-                          key={rule.id} onClick={() => {
-                            setIsCreating(false);
-                            setCurrentEditRule(rule);
-                            setShowDetail(true);
-                          }}>{rule.match}</Typography.Text>
-                      ))}
-                    </>
-                  }]}
+                <Input.Search
+                  style={{
+                    width: 200,
+                  }}
+                  placeholder="Search by url"
+                  onPressEnter={handleUrlSearch}
                 />
-              )}
-            </div>
+                <Button style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 4,
+                }} color="primary" variant="filled" onClick={() => handleExportRules()} icon={<ExportOutlined />} />
 
-            <JsonEditor
-              rootName=''
-              className='json-editor'
-              data={JSON.parse(currentEditRule?.overrideTxt || '{}')}
-              setData={handleRulesChange}
-            />
-          </div>
+                <Upload {...uploadProps}>
+                  <Button
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '4px',
+                    }}
+                    color="primary" variant="filled"
+                    icon={FaFileImport && <FaFileImport style={{ marginBottom: -1 }} />}
+                  />
+                </Upload>
+                <Button type="primary" onClick={handleAddNewRule}>
+                  <PlusOutlined />
+                  Add Rule
+                </Button>
+              </div>
+            </motion.div>
+            <motion.div
+              key='table-box'
+              ref={tableBoxRef}
+              style={{
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                height: 'calc(100% - 92px)',
+                position: 'relative',
+              }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0, transition: { duration: 0.3, type: "spring",delay: 0.8 } }}
+              exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring",delay: 0 } }}
+              // transition={{ duration: 0.3, type: "spring",delay: 0.8 }}
+              >
+              <Table
+                bordered
+                pagination={{
+                  pageSize: 20,
+                  total: rules.length,
+                  showTotal: (total, range) => `Total: ${total}`,
+                  showSizeChanger: true
+                }}
+                style={{
+                  height: '100%',
+                  opacity: switchOn ? 1 : 0.65,
+                }}
+                scroll={{ y: tableBoxHeight - 78 }}
+                size='small'
+                columns={tableColumns}
+                dataSource={rules}
+              />
+            </motion.div>
+            <Drawer
+              maskClosable={false}
+              width={1200}
+              title={isCreating ? 'Create new rule' : 'Detail for ' + currentEditRule?.label}
+              open={showDetail}
+              onClose={() => {
+                setShowDetail(false);
+                setIsCreating(false);
+                setDuplicateMatch([]);
+              }}
+              extra={
+                <Space>
+                  <Button onClick={() => setShowDetail(false)}>Cancel</Button>
+                  <Button type="primary" onClick={handleUpdateRules}>
+                    OK
+                  </Button>
+                </Space>
+              }
+            >
+              <div style={{
+                display: 'flex',
+                gap: '10px',
+                height: '100%',
+                overflowY: 'scroll',
+              }}>
+                <div style={{
+                  width: 500
+                }}>
+                  <Typography.Title level={4} style={{
+                    marginTop: 0
+                  }}>Id:</Typography.Title>
 
-        </Drawer>
-      </div>
+                  <Space.Compact style={{
+                    width: '100%',
+                  }}>
+                    <Input
+                      style={{
+                        marginBottom: '10px',
+                      }}
+                      disabled
+                      value={currentEditRule?.id || ''}
+                    />
+                    <Button type="primary" icon={<CopyOutlined />} onClick={() => {
+                      navigator.clipboard.writeText(currentEditRule?.id || '');
+                      message.success('Copied to clipboard');
+                    }}></Button>
+                  </Space.Compact>
+                  <Typography.Title level={4}>Label:</Typography.Title>
+                  <Input
+                    style={{
+                      marginBottom: '10px',
+                    }}
+                    value={currentEditRule?.label || ''}
+                    onChange={(e) => {
+                      if (currentEditRule) {
+                        setCurrentEditRule({ ...currentEditRule, label: e.target.value });
+                      }
+                    }}
+                  />
+                  <Typography.Title level={4}>Match:</Typography.Title>
+                  <Input.TextArea
+                    rows={10}
+                    style={{
+                      marginBottom: '10px',
+                    }}
+                    onBlur={checkDuplicateMatch}
+                    value={currentEditRule?.match || ''}
+                    onChange={(e) => {
+                      if (currentEditRule) {
+                        setCurrentEditRule({ ...currentEditRule, match: e.target.value });
+                      }
+                    }}
+                  />
+                  {duplicateMatch.length > 0 && isCreating && (
+                    <Collapse
+                      size="small"
+                      defaultActiveKey={['1']}
+                      items={[{
+                        key: '1', label: 'Duplicate match: ' + duplicateMatch.length, children: <>
+                          {duplicateMatch.map(rule => (
+                            <Typography.Text
+                              className='duplicate-match'
+                              key={rule.id} onClick={() => {
+                                setIsCreating(false);
+                                setCurrentEditRule(rule);
+                                setShowDetail(true);
+                              }}>{rule.match}</Typography.Text>
+                          ))}
+                        </>
+                      }]}
+                    />
+                  )}
+                </div>
+
+                <JsonEditor
+                  rootName=''
+                  className='json-editor'
+                  data={JSON.parse(currentEditRule?.overrideTxt || '{}')}
+                  setData={handleRulesChange}
+                />
+              </div>
+
+            </Drawer>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Spin>
+
   )
 
 };
