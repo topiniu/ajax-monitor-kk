@@ -800,9 +800,9 @@ const App = () => {
             // transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
           >
             <motion.div
-              key='header-box'
+             key='header-box'
              style={{  
-              padding: '20px',
+              padding: '12px',
               boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
               boxSizing: 'border-box',
               marginBottom: '20px',
@@ -815,14 +815,9 @@ const App = () => {
             exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring", delay: 0.3 } }}
             // transition={{ duration: 0.3, type: "spring",delay: 1.5 }}
             >
-              <div>
-                <Switch
-                  checkedChildren="On"
-                  unCheckedChildren="Off"
-                  checked={switchOn}
-                  onChange={handleSwitchChange}
-                />
-              </div>
+            <div  className='lock-btn small' onClick={handleSwitchChange}>
+              <BiSolidLock />
+            </div>
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -870,7 +865,7 @@ const App = () => {
               ref={tableBoxRef}
               style={{
                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                height: 'calc(100% - 92px)',
+                height: 'calc(100% - 84px)',
                 position: 'relative',
               }}
               initial={{ opacity: 0, y: 10 }}
