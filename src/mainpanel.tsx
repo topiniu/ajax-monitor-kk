@@ -30,6 +30,8 @@ import { FaFileExport, FaFileImport } from "react-icons/fa";
 import { JsonEditor } from 'json-edit-react'
 import { BiSolidLock } from "react-icons/bi";
 import { AnimatePresence, motion } from "motion/react"
+import { IconType } from 'react-icons';
+import { MdContentPaste } from "react-icons/md";
 
 
 const { Panel } = Collapse;
@@ -55,6 +57,9 @@ const buildUUID = () => {
 const generateUniqueId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 };
+
+// @ts-ignore
+const IconComponent = ({ icon: Icon, ...props }: { icon: IconType, [key: string]: any }) => <Icon {...props} />;
 
 const App = () => {
   const [interceptedRequests, setInterceptedRequests] = useState({});
@@ -751,39 +756,39 @@ const App = () => {
               justifyContent: 'center',
               gap: 5,
             }}
-            // initial={{ opacity: 0, scale: 0.2 }}
-            // animate={{ opacity: 1, scale: 1 }}
-            // exit={{ opacity: 0, scale: 1.2 }}
-            // transition={{ duration: 0.5, type: "spring", stiffness: 100 }}
+          // initial={{ opacity: 0, scale: 0.2 }}
+          // animate={{ opacity: 1, scale: 1 }}
+          // exit={{ opacity: 0, scale: 1.2 }}
+          // transition={{ duration: 0.5, type: "spring", stiffness: 100 }}
           >
             <motion.div
               key='lock'
               initial={{ opacity: 0, scale: 0.2 }}
-              animate={{ opacity: 1, scale: 1.5, transition: { duration: 0.5, type: "spring",delay: 0.5 }     }}
-              exit={{ opacity: 0, scale: 1.8, transition: { duration: 0.5, type: "spring",delay: 0.1 } }}
-              // transition={{ duration: 0.5, type: "spring",delay: 0.5 }}
+              animate={{ opacity: 1, scale: 1.5, transition: { duration: 0.5, type: "spring", delay: 0.5 } }}
+              exit={{ opacity: 0, scale: 1.8, transition: { duration: 0.5, type: "spring", delay: 0.1 } }}
+            // transition={{ duration: 0.5, type: "spring",delay: 0.5 }}
             >
               <div
-                className='lock-btn' 
+                className='lock-btn'
                 onClick={() => {
                   setSwitchOn(true);
                 }}
               >
-                <BiSolidLock />
+                <IconComponent icon={BiSolidLock} />
               </div>
             </motion.div>
             <motion.div
               key='lock-text'
               initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0, transition: { duration: 0.3, type: "spring",delay: 0.8 } }}
-              exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring",delay: 0 } }}
-              // transition={{ duration: 0.3, type: "spring",delay: 0.8 }}
+              animate={{ opacity: 1, y: 0, transition: { duration: 0.3, type: "spring", delay: 0.8 } }}
+              exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring", delay: 0 } }}
+            // transition={{ duration: 0.3, type: "spring",delay: 0.8 }}
             >
               <p style={{ fontSize: 16, fontStyle: 'italic', color: '#999' }}>Click to enable monitor</p>
             </motion.div>
           </motion.div>
         )}
-        
+
         {switchOn && (
           <motion.div
             key="main-content"
@@ -794,30 +799,30 @@ const App = () => {
               boxSizing: 'border-box',
               position: 'relative',
             }}
-            // initial={{ opacity: 0, y: 20 }}
-            // animate={{ opacity: 1, y: 0, transition: { duration: 0.5, type: "spring" } }}
-            // exit={{ opacity: 0, y: -20, transition: { duration: 0.3, type: "spring",delay: 0 } }}
-            // transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
+          // initial={{ opacity: 0, y: 20 }}
+          // animate={{ opacity: 1, y: 0, transition: { duration: 0.5, type: "spring" } }}
+          // exit={{ opacity: 0, y: -20, transition: { duration: 0.3, type: "spring",delay: 0 } }}
+          // transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
           >
             <motion.div
-             key='header-box'
-             style={{  
-              padding: '12px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              boxSizing: 'border-box',
-              marginBottom: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0, transition: { duration: 0.5, type: "spring", delay: 0.5 } }}
-            exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring", delay: 0.3 } }}
+              key='header-box'
+              style={{
+                padding: '12px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                boxSizing: 'border-box',
+                marginBottom: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0, transition: { duration: 0.5, type: "spring", delay: 0.5 } }}
+              exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring", delay: 0.3 } }}
             // transition={{ duration: 0.3, type: "spring",delay: 1.5 }}
             >
-            <div  className='lock-btn small' onClick={handleSwitchChange}>
-              <BiSolidLock />
-            </div>
+              <div className='lock-btn small' onClick={handleSwitchChange}>
+                <IconComponent icon={BiSolidLock} />
+              </div>
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -851,7 +856,7 @@ const App = () => {
                       borderRadius: '4px',
                     }}
                     color="primary" variant="filled"
-                    icon={FaFileImport && <FaFileImport style={{ marginBottom: -1 }} />}
+                    icon={<IconComponent icon={FaFileImport} style={{ marginBottom: -1 }} />}
                   />
                 </Upload>
                 <Button type="primary" onClick={handleAddNewRule}>
@@ -869,10 +874,10 @@ const App = () => {
                 position: 'relative',
               }}
               initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0, transition: { duration: 0.3, type: "spring",delay: 0.8 } }}
-              exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring",delay: 0 } }}
-              // transition={{ duration: 0.3, type: "spring",delay: 0.8 }}
-              >
+              animate={{ opacity: 1, y: 0, transition: { duration: 0.3, type: "spring", delay: 0.8 } }}
+              exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring", delay: 0 } }}
+            // transition={{ duration: 0.3, type: "spring",delay: 0.8 }}
+            >
               <Table
                 bordered
                 pagination={{
@@ -939,17 +944,30 @@ const App = () => {
                     }}></Button>
                   </Space.Compact>
                   <Typography.Title level={4}>Label:</Typography.Title>
-                  <Input
-                    style={{
-                      marginBottom: '10px',
-                    }}
-                    value={currentEditRule?.label || ''}
-                    onChange={(e) => {
-                      if (currentEditRule) {
-                        setCurrentEditRule({ ...currentEditRule, label: e.target.value });
-                      }
-                    }}
-                  />
+                  <Space.Compact style={{
+                    width: '100%',
+                  }}>
+
+                    <Input
+                      style={{
+                        marginBottom: '10px',
+                      }}
+                      value={currentEditRule?.label || ''}
+                      onChange={(e) => {
+                        if (currentEditRule) {
+                          setCurrentEditRule({ ...currentEditRule, label: e.target.value });
+                        }
+                      }}
+                    />
+                    <Button type="primary" icon={<IconComponent icon={MdContentPaste} />} onClick={() => {
+                      navigator.clipboard.readText().then(text => {
+                        if (currentEditRule) {
+                          setCurrentEditRule({ ...currentEditRule, label: text });
+                        }
+                      });
+                      message.success('Paste from clipboard');
+                    }}></Button>
+                  </Space.Compact>
                   <Typography.Title level={4}>Match:</Typography.Title>
                   <Input.TextArea
                     rows={10}

@@ -17,6 +17,7 @@
     "url": "https://github.com/chibat/chrome-extension-typescript-starter.git"
   },
   "dependencies": {
+    "24": "^0.0.0",
     "antd": "^5.23.1",
     "json-edit-react": "^1.19.2",
     "monaco-editor": "^0.50.0",
