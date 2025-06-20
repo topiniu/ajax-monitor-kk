@@ -447,6 +447,7 @@ const App = () => {
   };
 
   const handleSwitchChange = () => {
+    console.log('handleSwitchChange')
     setSwitchOn(prev => {
       const newSwitchOn = !prev;
       set('ajaxInterceptor_switchOn', newSwitchOn);
@@ -771,7 +772,8 @@ const App = () => {
               <div
                 className='lock-btn'
                 onClick={() => {
-                  setSwitchOn(true);
+                  // setSwitchOn(true);
+                  handleSwitchChange()
                 }}
               >
                 <IconComponent icon={BiSolidLock} />

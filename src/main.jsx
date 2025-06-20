@@ -8,6 +8,7 @@ let ajax_interceptor_qoweifjqon = {
   },
   // 获取匹配到的规则项
   getMatchedInterface: ({ thisRequestUrl = '', thisMethod = '' }) => {
+    console.log('【Ajax Modifier in getMatchedInterface】thisRequestUrl', thisRequestUrl)
     return ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules.find(item => {
       let { filterType = 'normal', limitMethod = 'ALL', switchOn = true, match } = item
       // remove \n if match has it in the end
@@ -67,11 +68,13 @@ let ajax_interceptor_qoweifjqon = {
   originalXHR: window.XMLHttpRequest,
   myXHR: function () {
     let pageScriptEventDispatched = false
-    const modifyResponse = () => {
-      const [method, requestUrl] = this._openArgs
+    const self = this; // Capture the custom wrapper context
+    console.log('【Ajax Modifier in xhr】self', self)
+    const modifyResponse = function () {
+      const [method, requestUrl] = self._openArgs
       const queryParams = ajax_interceptor_qoweifjqon.getRequestParams(requestUrl)
-      const [requestPayload] = this._sendArgs
-      const matchedInterface = this._matchedInterface
+      const [requestPayload] = self._sendArgs
+      const matchedInterface = self._matchedInterface
       console.log('【Ajax Modifier in xhr】matchedInterface', matchedInterface)
       if (matchedInterface && (matchedInterface.overrideTxt || matchedInterface.overrideResponseFunc)) {
         AJAX_MODIFIER_KK_PANEL_DATA.push(matchedInterface)
@@ -84,7 +87,7 @@ let ajax_interceptor_qoweifjqon = {
           // 普通模式，直接替换
           overrideResponse = overrideTxt
           // 状态用200覆盖
-          if (ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_always200On && this.status !== 200) {
+          if (ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_always200On && self.status !== 200) {
             overrideStatus = 200
             overrideStatusText = 'OK'
           }
@@ -96,9 +99,9 @@ let ajax_interceptor_qoweifjqon = {
               queryParams,
               requestPayload
             },
-            orgResponse: this.response,
-            orgStatus: this.status,
-            orgStatusText: this.statusText
+            orgResponse: self.response,
+            orgStatus: self.status,
+            orgStatusText: self.statusText
           }
           const res = ajax_interceptor_qoweifjqon.executeStringFunction(overrideResponseFunc, funcArgs, 'response')
           // 返回是对象才处理
@@ -116,13 +119,13 @@ let ajax_interceptor_qoweifjqon = {
           }
         }
         // 没有返回不替换
-        this.responseText = overrideResponse !== undefined ? overrideResponse : this.responseText
-        this.response = overrideResponse !== undefined ? overrideResponse : this.response
-        this.status = overrideStatus !== undefined ? overrideStatus : this.status
-        this.statusText = overrideStatusText !== undefined ? overrideStatusText : this.statusText
+        self.responseText = overrideResponse !== undefined ? overrideResponse : self.responseText
+        self.response = overrideResponse !== undefined ? overrideResponse : self.response
+        self.status = overrideStatus !== undefined ? overrideStatus : self.status
+        self.statusText = overrideStatusText !== undefined ? overrideStatusText : self.statusText
         if (!pageScriptEventDispatched) {
           window.dispatchEvent(new CustomEvent("pageScript", {
-            detail: { url: this.responseURL, match }
+            detail: { url: self.responseURL, match }
           }))
           pageScriptEventDispatched = true
         }
@@ -133,31 +136,30 @@ let ajax_interceptor_qoweifjqon = {
     for (let attr in xhr) {
       if (attr === 'onreadystatechange') {
         xhr.onreadystatechange = (...args) => {
-          if (this.readyState === 4) {
-            // 请求成功
-            modifyResponse()
+          if (xhr.readyState === 4) {
+            modifyResponse();
           }
-          this.onreadystatechange && this.onreadystatechange.apply(this, args)
+          self.onreadystatechange && self.onreadystatechange.apply(self, args)
         }
-        this.onreadystatechange = null
+        self.onreadystatechange = null
         continue
       } else if (attr === 'onload') {
         xhr.onload = (...args) => {
-          // 请求成功
-          modifyResponse()
-          this.onload && this.onload.apply(this, args)
+          modifyResponse();
+          self.onload && self.onload.apply(self, args)
         }
-        this.onload = null
+        self.onload = null
         continue
       } else if (attr === 'open') {
-        this.open = (...args) => {
-          this._openArgs = args
+        self.open = (...args) => {
+          self._openArgs = args
           const [method, requestUrl] = args
-          this._matchedInterface = ajax_interceptor_qoweifjqon.getMatchedInterface({
+          self._matchedInterface = ajax_interceptor_qoweifjqon.getMatchedInterface({
             thisRequestUrl: ajax_interceptor_qoweifjqon.getCompleteUrl(requestUrl),
             thisMethod: method
           })
-          const matchedInterface = this._matchedInterface
+          console.log('【Ajax Modifier in xhr】self._matchedInterface', self._matchedInterface)
+          const matchedInterface = self._matchedInterface
           // modify request
           if (matchedInterface) {
             const { overridePayloadFunc, isExpert = false } = matchedInterface
@@ -174,51 +176,51 @@ let ajax_interceptor_qoweifjqon = {
         }
         continue
       } else if (attr === 'setRequestHeader') {
-        this.setRequestHeader = (...args) => {
+        self.setRequestHeader = (...args) => {
           // get headers
-          this._headerArgs = this._headerArgs ? Object.assign(this._headerArgs, { [args[0]]: args[1] }) : { [args[0]]: args[1] };
-          const matchedInterface = this._matchedInterface;
+          self._headerArgs = self._headerArgs ? Object.assign(self._headerArgs, { [args[0]]: args[1] }) : { [args[0]]: args[1] };
+          const matchedInterface = self._matchedInterface;
           if (!(matchedInterface && matchedInterface.overrideHeadersFunc && matchedInterface.isExpert)) { // 没有要拦截修改或添加的header
             xhr.setRequestHeader && xhr.setRequestHeader.apply(xhr, args);
           }
         }
         continue;
       } else if (attr === 'send') {
-        this.send = (...args) => {
-          const matchedInterface = this._matchedInterface
+        self.send = (...args) => {
+          const matchedInterface = self._matchedInterface
           if (matchedInterface) {
             // modify headers
             const { overrideHeadersFunc, overridePayloadFunc, isExpert = false } = matchedInterface
             if (overrideHeadersFunc && isExpert) {
-              const headers = ajax_interceptor_qoweifjqon.executeStringFunction(overrideHeadersFunc, this._headerArgs, 'headers')
+              const headers = ajax_interceptor_qoweifjqon.executeStringFunction(overrideHeadersFunc, self._headerArgs, 'headers')
               Object.keys(headers).forEach((key) => {
                 xhr.setRequestHeader && xhr.setRequestHeader.apply(xhr, [key, headers[key]]);
               })
             }
             // modify not GET payload
-            const [method] = this._openArgs
+            const [method] = self._openArgs
             if (overridePayloadFunc && isExpert && method !== 'GET') {
               args[0] = ajax_interceptor_qoweifjqon.executeStringFunction(overridePayloadFunc, args[0], 'payload');
             }
           }
-          this._sendArgs = args
+          self._sendArgs = args
           xhr.send && xhr.send.apply(xhr, args)
         }
         continue
       }
 
       if (typeof xhr[attr] === 'function') {
-        this[attr] = xhr[attr].bind(xhr)
+        self[attr] = xhr[attr].bind(xhr)
       } else {
-        // responseText和response不是writeable的，但拦截时需要修改它，所以修改就存储在this[`_${attr}`]上
+        // responseText和response不是writeable的，但拦截时需要修改它，所以修改就存储在self[`_${attr}`]上
         if (['responseText', 'response', 'status', 'statusText'].includes(attr)) {
-          Object.defineProperty(this, attr, {
-            get: () => this[`_${attr}`] == undefined ? xhr[attr] : this[`_${attr}`],
-            set: (val) => this[`_${attr}`] = val,
+          Object.defineProperty(self, attr, {
+            get: () => self[`_${attr}`] == undefined ? xhr[attr] : self[`_${attr}`],
+            set: (val) => self[`_${attr}`] = val,
             enumerable: true
           })
         } else {
-          Object.defineProperty(this, attr, {
+          Object.defineProperty(self, attr, {
             get: () => xhr[attr],
             set: (val) => xhr[attr] = val,
             enumerable: true
@@ -229,6 +231,7 @@ let ajax_interceptor_qoweifjqon = {
   },
   originalFetch: window.fetch.bind(window),
   myFetch: function (...args) {
+    console.log('【Ajax Modifier in fetch】args', args)
     const getOriginalResponse = async (stream) => {
       let text = '';
       const decoder = new TextDecoder('utf-8');
@@ -254,11 +257,13 @@ let ajax_interceptor_qoweifjqon = {
     } else if (typeof requestUrl === 'object') {
       inputUrl = requestUrl.url || ''
     }
+    console.log('[看看]inputUrl', inputUrl)
 
     const matchedInterface = ajax_interceptor_qoweifjqon.getMatchedInterface({
       thisRequestUrl: ajax_interceptor_qoweifjqon.getCompleteUrl(inputUrl),
       thisMethod: data && data.method
     })
+    console.log('[看看]matchedInterface', matchedInterface)
     if (matchedInterface && args) {
       AJAX_MODIFIER_KK_PANEL_DATA.push(matchedInterface)
       updateFloatPanelContent()
@@ -518,6 +523,24 @@ const createFloatPanel = () => {
   document.body.appendChild(panel)
 }
 
+// Sync switch status from storage on page load
+if (chrome && chrome.storage && chrome.storage.local) {
+  chrome.storage.local.get(['ajaxInterceptor_switchOn'], (result) => {
+    console.log('【Ajax Modifier in chrome.storage.local】', result)
+    const switchOn = result.ajaxInterceptor_switchOn;
+    if (switchOn) {
+      window.XMLHttpRequest = ajax_interceptor_qoweifjqon.myXHR;
+      window.fetch = ajax_interceptor_qoweifjqon.myFetch;
+    } else {
+      window.XMLHttpRequest = ajax_interceptor_qoweifjqon.originalXHR;
+      window.fetch = ajax_interceptor_qoweifjqon.originalFetch;
+    }
+  });
+} else {
+  // fallback: default to custom implementations if chrome.storage is not available
+  window.XMLHttpRequest = ajax_interceptor_qoweifjqon.myXHR;
+  window.fetch = ajax_interceptor_qoweifjqon.myFetch;
+}
 
 window.addEventListener("message", function (event) {
 
@@ -525,7 +548,7 @@ window.addEventListener("message", function (event) {
   // console.log('data from content_script main.js', data)
 
   if (data.type === 'ajaxInterceptor' && data.to === 'pageScript') {
-    console.log('data', data)
+    console.log('data?', data, this.window.fetch)
     ajax_interceptor_qoweifjqon.settings[data.key] = data.value
 
 
@@ -538,12 +561,8 @@ window.addEventListener("message", function (event) {
   }
 
   if (ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_switchOn) {
-    window.XMLHttpRequest = ajax_interceptor_qoweifjqon.myXHR
-    window.fetch = ajax_interceptor_qoweifjqon.myFetch
     showFloatPanelButton()
   } else {
-    window.XMLHttpRequest = ajax_interceptor_qoweifjqon.originalXHR
-    window.fetch = ajax_interceptor_qoweifjqon.originalFetch
     hideFloatPanelButton()
     hideFloatPanel()
   }
