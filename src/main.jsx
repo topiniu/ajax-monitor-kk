@@ -1,30 +1,43 @@
-const AJAX_MODIFIER_KK_PANEL_DATA = []
+const AJAX_MODIFIER_KK_PANEL_DATA = [];
 // 命名空间
-let ajax_interceptor_qoweifjqon = {
+let ajax_interceptor = {
   settings: {
     ajaxInterceptor_switchOn: false,
     ajaxInterceptor_always200On: true, // 默认开启，后期可以扩展成设置项
     ajaxInterceptor_rules: [],
   },
   // 获取匹配到的规则项
-  getMatchedInterface: ({ thisRequestUrl = '', thisMethod = '' }) => {
-    console.log('【Ajax Modifier in getMatchedInterface】thisRequestUrl', thisRequestUrl)
-    return ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules.find(item => {
-      let { filterType = 'normal', limitMethod = 'ALL', switchOn = true, match } = item
+  getMatchedInterface: ({ thisRequestUrl = "", thisMethod = "" }) => {
+    console.log(
+      "【Ajax Modifier in getMatchedInterface】thisRequestUrl",
+      thisRequestUrl
+    );
+    return ajax_interceptor.settings.ajaxInterceptor_rules.find((item) => {
+      let {
+        filterType = "normal",
+        limitMethod = "ALL",
+        switchOn = true,
+        match,
+      } = item;
       // remove \n if match has it in the end
-      match = match?.replace(/\n$/, '')
-      const matchedMethod = thisMethod === limitMethod || limitMethod === 'ALL'
-      const matchedRequest = (filterType === 'normal' && thisRequestUrl === match) ||
-        (filterType === 'regex' && thisRequestUrl.match(new RegExp(match, 'i')))
-      return switchOn && matchedMethod && matchedRequest
-    })
+      match = match?.replace(/\n$/, "");
+      const matchedMethod = thisMethod === limitMethod || limitMethod === "ALL";
+      const matchedRequest =
+        (filterType === "normal" && thisRequestUrl === match) ||
+        (filterType === "regex" &&
+          thisRequestUrl.match(new RegExp(match, "i")));
+      return switchOn && matchedMethod && matchedRequest;
+    });
   },
   // 执行用户输入的函数，如果有错误会抛出到控制台
-  executeStringFunction: (stringFunction, args, funcName = '') => {
+  executeStringFunction: (stringFunction, args, funcName = "") => {
     try {
-      stringFunction = (new Function('...args', stringFunction))(args)
+      stringFunction = new Function("...args", stringFunction)(args);
     } catch (e) {
-      console.error(`[Ajax Modifier] ExecuteFunctionError: Please check the ${funcName} function.\n`, e)
+      console.error(
+        `[Ajax Modifier] ExecuteFunctionError: Please check the ${funcName} function.\n`,
+        e
+      );
     }
     return stringFunction;
   },
@@ -32,64 +45,78 @@ let ajax_interceptor_qoweifjqon = {
     if (!requestUrl) {
       return null;
     }
-    const paramStr = requestUrl.split('?').pop();
-    const keyValueArr = paramStr.split('&');
+    const paramStr = requestUrl.split("?").pop();
+    const keyValueArr = paramStr.split("&");
     let keyValueObj = {};
     keyValueArr.forEach((item) => {
       // 保证中间不会把=给忽略掉
-      const itemArr = item.replace('=', '〓').split('〓');
+      const itemArr = item.replace("=", "〓").split("〓");
       const itemObj = { [itemArr[0]]: itemArr[1] };
       keyValueObj = Object.assign(keyValueObj, itemObj);
     });
     return keyValueObj;
   },
   getCompleteUrl: (inputUrl) => {
-    let url = inputUrl.trim()
-    const protocol = window.location.protocol
-    const host = window.location.host
-    const currentUrl = window.location.href
+    let url = inputUrl.trim();
+    const protocol = window.location.protocol;
+    const host = window.location.host;
+    const currentUrl = window.location.href;
     try {
       // 如果解析成功，表示输入是完整的URL，不需要处理
-      new URL(url)
+      new URL(url);
     } catch (e) {
       if (url.startsWith("./") || url.startsWith("../")) {
         // 相对路由
-        url = new URL(url, currentUrl).href
+        url = new URL(url, currentUrl).href;
       } else if (url.startsWith("//")) {
         // 只缺少协议，补全协议
-        url = protocol + url
+        url = protocol + url;
       } else {
         // 既没有协议也没有域名，补全域名和协议
-        url = protocol + "//" + host + (url.startsWith("/") ? "" : "/") + url
+        url = protocol + "//" + host + (url.startsWith("/") ? "" : "/") + url;
       }
     }
-    return url
+    return url;
   },
   originalXHR: window.XMLHttpRequest,
   myXHR: function () {
-    let pageScriptEventDispatched = false
+    // console.log("【Ajax Modifier in xhr】self", self);
+    let pageScriptEventDispatched = false;
     const self = this; // Capture the custom wrapper context
-    console.log('【Ajax Modifier in xhr】self', self)
+    if (!ajax_interceptor.settings.ajaxInterceptor_switchOn) {
+      return ajax_interceptor.originalXHR();
+    }
     const modifyResponse = function () {
-      const [method, requestUrl] = self._openArgs
-      const queryParams = ajax_interceptor_qoweifjqon.getRequestParams(requestUrl)
-      const [requestPayload] = self._sendArgs
-      const matchedInterface = self._matchedInterface
-      console.log('【Ajax Modifier in xhr】matchedInterface', matchedInterface)
-      if (matchedInterface && (matchedInterface.overrideTxt || matchedInterface.overrideResponseFunc)) {
-        AJAX_MODIFIER_KK_PANEL_DATA.push(matchedInterface)
-        updateFloatPanelContent()
-        const { overrideTxt, overrideResponseFunc, match, isExpert = false } = matchedInterface
-        let overrideResponse = undefined
-        let overrideStatus = undefined
-        let overrideStatusText = undefined
+      const [method, requestUrl] = self._openArgs;
+      const queryParams = ajax_interceptor.getRequestParams(requestUrl);
+      const [requestPayload] = self._sendArgs;
+      const matchedInterface = self._matchedInterface;
+      console.log("【Ajax Modifier in xhr】matchedInterface", matchedInterface);
+      if (
+        matchedInterface &&
+        (matchedInterface.overrideTxt || matchedInterface.overrideResponseFunc)
+      ) {
+        AJAX_MODIFIER_KK_PANEL_DATA.push(matchedInterface);
+        updateFloatPanelContent();
+        const {
+          overrideTxt,
+          overrideResponseFunc,
+          match,
+          isExpert = false,
+        } = matchedInterface;
+        let overrideResponse = undefined;
+        let overrideStatus = undefined;
+        let overrideStatusText = undefined;
         if (overrideTxt && !isExpert) {
           // 普通模式，直接替换
-          overrideResponse = overrideTxt
+          overrideResponse = overrideTxt;
           // 状态用200覆盖
-          if (ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_always200On && self.status !== 200) {
-            overrideStatus = 200
-            overrideStatusText = 'OK'
+          if (
+            ajax_interceptor.settings.ajaxInterceptor_always200On &&
+            self.status !== 200
+          ) {
+            overrideStatus = 200;
+            overrideStatusText = "OK";
           }
         } else if (overrideResponseFunc && isExpert) {
           // 专业模式，用函数替换
@@ -97,144 +124,199 @@ let ajax_interceptor_qoweifjqon = {
             method,
             payload: {
               queryParams,
-              requestPayload
+              requestPayload,
             },
             orgResponse: self.response,
             orgStatus: self.status,
-            orgStatusText: self.statusText
-          }
-          const res = ajax_interceptor_qoweifjqon.executeStringFunction(overrideResponseFunc, funcArgs, 'response')
+            orgStatusText: self.statusText,
+          };
+          const res = ajax_interceptor.executeStringFunction(
+            overrideResponseFunc,
+            funcArgs,
+            "response"
+          );
           // 返回是对象才处理
-          if (typeof res === 'object' && res !== null) {
+          if (typeof res === "object" && res !== null) {
             const {
               response: newResponse = undefined,
               status: newStatus = undefined,
-              statusText: newStatusText = undefined
-            } = res
-            overrideResponse = newResponse
-            overrideStatus = newStatus
-            overrideStatusText = newStatusText
+              statusText: newStatusText = undefined,
+            } = res;
+            overrideResponse = newResponse;
+            overrideStatus = newStatus;
+            overrideStatusText = newStatusText;
           } else {
-            console.error(`[Ajax Modifier] ExecuteFunctionError: Please check your return in the response function. See more details in the examples. \n`)
+            console.error(
+              `[Ajax Modifier] ExecuteFunctionError: Please check your return in the response function. See more details in the examples. \n`
+            );
           }
         }
         // 没有返回不替换
-        self.responseText = overrideResponse !== undefined ? overrideResponse : self.responseText
-        self.response = overrideResponse !== undefined ? overrideResponse : self.response
-        self.status = overrideStatus !== undefined ? overrideStatus : self.status
-        self.statusText = overrideStatusText !== undefined ? overrideStatusText : self.statusText
+        self.responseText =
+          overrideResponse !== undefined ? overrideResponse : self.responseText;
+        self.response =
+          overrideResponse !== undefined ? overrideResponse : self.response;
+        self.status =
+          overrideStatus !== undefined ? overrideStatus : self.status;
+        self.statusText =
+          overrideStatusText !== undefined
+            ? overrideStatusText
+            : self.statusText;
         if (!pageScriptEventDispatched) {
-          window.dispatchEvent(new CustomEvent("pageScript", {
-            detail: { url: self.responseURL, match }
-          }))
-          pageScriptEventDispatched = true
+          window.dispatchEvent(
+            new CustomEvent("pageScript", {
+              detail: { url: self.responseURL, match },
+            })
+          );
+          pageScriptEventDispatched = true;
         }
       }
-    }
+    };
 
-    const xhr = new ajax_interceptor_qoweifjqon.originalXHR
+    const xhr = new ajax_interceptor.originalXHR();
     for (let attr in xhr) {
-      if (attr === 'onreadystatechange') {
+      if (attr === "onreadystatechange") {
         xhr.onreadystatechange = (...args) => {
           if (xhr.readyState === 4) {
             modifyResponse();
           }
-          self.onreadystatechange && self.onreadystatechange.apply(self, args)
-        }
-        self.onreadystatechange = null
-        continue
-      } else if (attr === 'onload') {
+          self.onreadystatechange && self.onreadystatechange.apply(self, args);
+        };
+        self.onreadystatechange = null;
+        continue;
+      } else if (attr === "onload") {
         xhr.onload = (...args) => {
           modifyResponse();
-          self.onload && self.onload.apply(self, args)
-        }
-        self.onload = null
-        continue
-      } else if (attr === 'open') {
+          self.onload && self.onload.apply(self, args);
+        };
+        self.onload = null;
+        continue;
+      } else if (attr === "open") {
         self.open = (...args) => {
-          self._openArgs = args
-          const [method, requestUrl] = args
-          self._matchedInterface = ajax_interceptor_qoweifjqon.getMatchedInterface({
-            thisRequestUrl: ajax_interceptor_qoweifjqon.getCompleteUrl(requestUrl),
-            thisMethod: method
-          })
-          console.log('【Ajax Modifier in xhr】self._matchedInterface', self._matchedInterface)
-          const matchedInterface = self._matchedInterface
+          self._openArgs = args;
+          const [method, requestUrl] = args;
+          self._matchedInterface = ajax_interceptor.getMatchedInterface({
+            thisRequestUrl: ajax_interceptor.getCompleteUrl(requestUrl),
+            thisMethod: method,
+          });
+          console.log(
+            "【Ajax Modifier in xhr】self._matchedInterface",
+            self._matchedInterface
+          );
+          const matchedInterface = self._matchedInterface;
           // modify request
           if (matchedInterface) {
-            const { overridePayloadFunc, isExpert = false } = matchedInterface
-            if (overridePayloadFunc && isExpert && args[0] && args[1] && args[0].toUpperCase() === 'GET') {
-              const queryParams = ajax_interceptor_qoweifjqon.getRequestParams(args[1])
+            const { overridePayloadFunc, isExpert = false } = matchedInterface;
+            if (
+              overridePayloadFunc &&
+              isExpert &&
+              args[0] &&
+              args[1] &&
+              args[0].toUpperCase() === "GET"
+            ) {
+              const queryParams = ajax_interceptor.getRequestParams(args[1]);
               const data = {
                 requestUrl: args[1],
-                queryParams
-              }
-              args[1] = ajax_interceptor_qoweifjqon.executeStringFunction(overridePayloadFunc, data, 'payload')
+                queryParams,
+              };
+              args[1] = ajax_interceptor.executeStringFunction(
+                overridePayloadFunc,
+                data,
+                "payload"
+              );
             }
           }
-          xhr.open && xhr.open.apply(xhr, args)
-        }
-        continue
-      } else if (attr === 'setRequestHeader') {
+          xhr.open && xhr.open.apply(xhr, args);
+        };
+        continue;
+      } else if (attr === "setRequestHeader") {
         self.setRequestHeader = (...args) => {
           // get headers
-          self._headerArgs = self._headerArgs ? Object.assign(self._headerArgs, { [args[0]]: args[1] }) : { [args[0]]: args[1] };
+          self._headerArgs = self._headerArgs
+            ? Object.assign(self._headerArgs, { [args[0]]: args[1] })
+            : { [args[0]]: args[1] };
           const matchedInterface = self._matchedInterface;
-          if (!(matchedInterface && matchedInterface.overrideHeadersFunc && matchedInterface.isExpert)) { // 没有要拦截修改或添加的header
+          if (
+            !(
+              matchedInterface &&
+              matchedInterface.overrideHeadersFunc &&
+              matchedInterface.isExpert
+            )
+          ) {
+            // 没有要拦截修改或添加的header
             xhr.setRequestHeader && xhr.setRequestHeader.apply(xhr, args);
           }
-        }
+        };
         continue;
-      } else if (attr === 'send') {
+      } else if (attr === "send") {
         self.send = (...args) => {
-          const matchedInterface = self._matchedInterface
+          const matchedInterface = self._matchedInterface;
           if (matchedInterface) {
             // modify headers
-            const { overrideHeadersFunc, overridePayloadFunc, isExpert = false } = matchedInterface
+            const {
+              overrideHeadersFunc,
+              overridePayloadFunc,
+              isExpert = false,
+            } = matchedInterface;
             if (overrideHeadersFunc && isExpert) {
-              const headers = ajax_interceptor_qoweifjqon.executeStringFunction(overrideHeadersFunc, self._headerArgs, 'headers')
+              const headers = ajax_interceptor.executeStringFunction(
+                overrideHeadersFunc,
+                self._headerArgs,
+                "headers"
+              );
               Object.keys(headers).forEach((key) => {
-                xhr.setRequestHeader && xhr.setRequestHeader.apply(xhr, [key, headers[key]]);
-              })
+                xhr.setRequestHeader &&
+                  xhr.setRequestHeader.apply(xhr, [key, headers[key]]);
+              });
             }
             // modify not GET payload
-            const [method] = self._openArgs
-            if (overridePayloadFunc && isExpert && method !== 'GET') {
-              args[0] = ajax_interceptor_qoweifjqon.executeStringFunction(overridePayloadFunc, args[0], 'payload');
+            const [method] = self._openArgs;
+            if (overridePayloadFunc && isExpert && method !== "GET") {
+              args[0] = ajax_interceptor.executeStringFunction(
+                overridePayloadFunc,
+                args[0],
+                "payload"
+              );
             }
           }
-          self._sendArgs = args
-          xhr.send && xhr.send.apply(xhr, args)
-        }
-        continue
+          self._sendArgs = args;
+          xhr.send && xhr.send.apply(xhr, args);
+        };
+        continue;
       }
 
-      if (typeof xhr[attr] === 'function') {
-        self[attr] = xhr[attr].bind(xhr)
+      if (typeof xhr[attr] === "function") {
+        self[attr] = xhr[attr].bind(xhr);
       } else {
         // responseText和response不是writeable的，但拦截时需要修改它，所以修改就存储在self[`_${attr}`]上
-        if (['responseText', 'response', 'status', 'statusText'].includes(attr)) {
+        if (
+          ["responseText", "response", "status", "statusText"].includes(attr)
+        ) {
           Object.defineProperty(self, attr, {
-            get: () => self[`_${attr}`] == undefined ? xhr[attr] : self[`_${attr}`],
-            set: (val) => self[`_${attr}`] = val,
-            enumerable: true
-          })
+            get: () =>
+              self[`_${attr}`] == undefined ? xhr[attr] : self[`_${attr}`],
+            set: (val) => (self[`_${attr}`] = val),
+            enumerable: true,
+          });
         } else {
           Object.defineProperty(self, attr, {
             get: () => xhr[attr],
-            set: (val) => xhr[attr] = val,
-            enumerable: true
-          })
+            set: (val) => (xhr[attr] = val),
+            enumerable: true,
+          });
         }
       }
     }
   },
   originalFetch: window.fetch.bind(window),
   myFetch: function (...args) {
-    console.log('【Ajax Modifier in fetch】args', args)
+    console.log("【Ajax Modifier in fetch】args", args);
+    if (!ajax_interceptor.settings.ajaxInterceptor_switchOn) {
+      return ajax_interceptor.originalFetch(...args);
+    }
     const getOriginalResponse = async (stream) => {
-      let text = '';
-      const decoder = new TextDecoder('utf-8');
+      let text = "";
+      const decoder = new TextDecoder("utf-8");
       const reader = stream.getReader();
       const processData = (result) => {
         if (result.done) {
@@ -246,324 +328,445 @@ let ajax_interceptor_qoweifjqon = {
         return reader.read().then(processData);
       };
       return await reader.read().then(processData);
-    }
+    };
     const [requestUrl, data] = args;
 
+    let inputUrl = "";
 
-    let inputUrl = ''
-
-    if (typeof requestUrl === 'string') {
-      inputUrl = requestUrl
-    } else if (typeof requestUrl === 'object') {
-      inputUrl = requestUrl.url || ''
+    if (typeof requestUrl === "string") {
+      inputUrl = requestUrl;
+    } else if (typeof requestUrl === "object") {
+      inputUrl = requestUrl.url || "";
     }
-    console.log('[看看]inputUrl', inputUrl)
+    console.log("[看看]inputUrl", inputUrl);
 
-    const matchedInterface = ajax_interceptor_qoweifjqon.getMatchedInterface({
-      thisRequestUrl: ajax_interceptor_qoweifjqon.getCompleteUrl(inputUrl),
-      thisMethod: data && data.method
-    })
-    console.log('[看看]matchedInterface', matchedInterface)
+    const matchedInterface = ajax_interceptor.getMatchedInterface({
+      thisRequestUrl: ajax_interceptor.getCompleteUrl(inputUrl),
+      thisMethod: data && data.method,
+    });
+    console.log("[看看]matchedInterface", matchedInterface);
     if (matchedInterface && args) {
-      AJAX_MODIFIER_KK_PANEL_DATA.push(matchedInterface)
-      updateFloatPanelContent()
-      const { overrideHeadersFunc, overridePayloadFunc, isExpert = false } = matchedInterface;
+      AJAX_MODIFIER_KK_PANEL_DATA.push(matchedInterface);
+      updateFloatPanelContent();
+      const {
+        overrideHeadersFunc,
+        overridePayloadFunc,
+        isExpert = false,
+      } = matchedInterface;
       if (overrideHeadersFunc && isExpert && args[1]) {
-        const headers = ajax_interceptor_qoweifjqon.executeStringFunction(overrideHeadersFunc, this._headerArgs, 'headers')
-        args[1].headers = headers
+        const headers = ajax_interceptor.executeStringFunction(
+          overrideHeadersFunc,
+          this._headerArgs,
+          "headers"
+        );
+        args[1].headers = headers;
       }
       if (overridePayloadFunc && isExpert && args[0] && args[1]) {
-        const { method } = args[1]
-        if (['GET', 'HEAD'].includes(method.toUpperCase())) {
-          const queryParams = ajax_interceptor_qoweifjqon.getRequestParams(args[0]);
+        const { method } = args[1];
+        if (["GET", "HEAD"].includes(method.toUpperCase())) {
+          const queryParams = ajax_interceptor.getRequestParams(args[0]);
           const data = {
             requestUrl: args[0],
-            queryParams
-          }
-          args[0] = ajax_interceptor_qoweifjqon.executeStringFunction(overridePayloadFunc, data, 'payload');
+            queryParams,
+          };
+          args[0] = ajax_interceptor.executeStringFunction(
+            overridePayloadFunc,
+            data,
+            "payload"
+          );
         } else {
-          data.body = ajax_interceptor_qoweifjqon.executeStringFunction(overridePayloadFunc, data.body, 'payload');
+          data.body = ajax_interceptor.executeStringFunction(
+            overridePayloadFunc,
+            data.body,
+            "payload"
+          );
         }
       }
     }
-    return ajax_interceptor_qoweifjqon.originalFetch(...args).then(async (response) => {
-      if (matchedInterface && (matchedInterface.overrideTxt || matchedInterface.overrideResponseFunc)) {
-        window.dispatchEvent(new CustomEvent("pageScript", {
-          detail: { url: response.url, match: matchedInterface.match }
-        }))
-        let txt = undefined
-        txt = matchedInterface.overrideTxt
-        const { overrideTxt, overrideResponseFunc, isExpert = false } = matchedInterface
-        let overrideResponse = undefined
-        let overrideStatus = undefined
-        let overrideStatusText = undefined
+    return ajax_interceptor.originalFetch(...args).then(async (response) => {
+      console.log("【Ajax Modifier in fetch】response", response);
+      if (
+        matchedInterface &&
+        (matchedInterface.overrideTxt || matchedInterface.overrideResponseFunc)
+      ) {
+        window.dispatchEvent(
+          new CustomEvent("pageScript", {
+            detail: { url: response.url, match: matchedInterface.match },
+          })
+        );
+        let txt = undefined;
+        txt = matchedInterface.overrideTxt;
+        const {
+          overrideTxt,
+          overrideResponseFunc,
+          isExpert = false,
+        } = matchedInterface;
+        let overrideResponse = undefined;
+        let overrideStatus = undefined;
+        let overrideStatusText = undefined;
 
         if (overrideTxt && !isExpert) {
           // 普通模式，直接替换
-          overrideResponse = overrideTxt
+          overrideResponse = overrideTxt;
           // 状态用200覆盖
-          if (ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_always200On && this.status !== 200) {
-            overrideStatus = 200
-            overrideStatusText = 'OK'
+          if (
+            ajax_interceptor.settings.ajaxInterceptor_always200On &&
+            this.status !== 200
+          ) {
+            overrideStatus = 200;
+            overrideStatusText = "OK";
           }
         } else if (overrideResponseFunc && isExpert) {
           // 专业模式，用函数替换
-          const queryParams = ajax_interceptor_qoweifjqon.getRequestParams(requestUrl)
+          const queryParams = ajax_interceptor.getRequestParams(requestUrl);
           const orgResponse = await getOriginalResponse(response.body);
           const funcArgs = {
             method: data?.method,
             payload: {
               queryParams,
-              requestPayload: data?.body
+              requestPayload: data?.body,
             },
             orgResponse,
             orgStatus: response.status,
-            orgStatusText: response.statusText
-          }
-          const res = ajax_interceptor_qoweifjqon.executeStringFunction(overrideResponseFunc, funcArgs, 'response')
-          if (typeof res === 'object' && res !== null) {
+            orgStatusText: response.statusText,
+          };
+          const res = ajax_interceptor.executeStringFunction(
+            overrideResponseFunc,
+            funcArgs,
+            "response"
+          );
+          if (typeof res === "object" && res !== null) {
             const {
               response: newResponse = undefined,
               status: newStatus = undefined,
-              statusText: newStatusText = undefined
-            } = res
-            overrideResponse = newResponse
-            overrideStatus = newStatus
-            overrideStatusText = newStatusText
+              statusText: newStatusText = undefined,
+            } = res;
+            overrideResponse = newResponse;
+            overrideStatus = newStatus;
+            overrideStatusText = newStatusText;
           } else {
-            console.error(`[Ajax Modifier] ExecuteFunctionError: Please check your return in the response function. See more details in the examples. \n`)
+            console.error(
+              `[Ajax Modifier] ExecuteFunctionError: Please check your return in the response function. See more details in the examples. \n`
+            );
           }
         }
-        txt = overrideResponse !== undefined ? overrideResponse : response.responseText
+        txt =
+          overrideResponse !== undefined
+            ? overrideResponse
+            : response.responseText;
         const stream = new ReadableStream({
           start(controller) {
             // const bufView = new Uint8Array(new ArrayBuffer(txt.length))
             // for (var i = 0 i < txt.length i++) {
             //   bufView[i] = txt.charCodeAt(i)
             // }
-            controller.enqueue(new TextEncoder().encode(txt))
-            controller.close()
-          }
-        })
+            controller.enqueue(new TextEncoder().encode(txt));
+            controller.close();
+          },
+        });
         let params = {
-          status: overrideStatus !== undefined ? overrideStatus : response.status,
-          statusText: overrideStatusText !== undefined ? overrideStatusText : response.statusText,
-        }
+          status:
+            overrideStatus !== undefined ? overrideStatus : response.status,
+          statusText:
+            overrideStatusText !== undefined
+              ? overrideStatusText
+              : response.statusText,
+        };
         const newResponse = new Response(stream, {
           headers: response.headers,
-          ...params
-        })
+          ...params,
+        });
         const proxy = new Proxy(newResponse, {
           get: function (target, name) {
             switch (name) {
-              case 'redirected':
-              case 'type':
-              case 'url':
-              case 'useFinalURL':
-              case 'body':
-              case 'bodyUsed':
-                return response[name]
+              case "redirected":
+              case "type":
+              case "url":
+              case "useFinalURL":
+              case "body":
+              case "bodyUsed":
+                return response[name];
             }
-            return target[name]
-          }
-        })
+            return target[name];
+          },
+        });
         for (let key in proxy) {
-          if (typeof proxy[key] === 'function') {
-            proxy[key] = proxy[key].bind(newResponse)
+          if (typeof proxy[key] === "function") {
+            proxy[key] = proxy[key].bind(newResponse);
           }
         }
-        return proxy
+        return proxy;
       } else {
-        return response
+        return response;
       }
-    })
+    });
   },
-}
+};
 
 const toastMessage = (matchedInterface) => {
   // toast a message though dom to show the matchedInterface
-  const toast = document.createElement('div')
-  toast.style.position = 'fixed'
-  toast.style.top = '10px'
-  toast.style.left = '10px'
-  toast.style.backgroundColor = 'red'
-  toast.style.color = 'white'
-  toast.style.padding = '10px'
-  toast.style.zIndex = '9999'
-  toast.style.opacity = '0.5'
-  toast.innerHTML = `[AJAx Modifier] matchedInterface: ${matchedInterface.match}`
-  document.body.appendChild(toast)
+  const toast = document.createElement("div");
+  toast.style.position = "fixed";
+  toast.style.top = "10px";
+  toast.style.left = "10px";
+  toast.style.backgroundColor = "red";
+  toast.style.color = "white";
+  toast.style.padding = "10px";
+  toast.style.zIndex = "9999";
+  toast.style.opacity = "0.5";
+  toast.innerHTML = `[AJAx Modifier] matchedInterface: ${matchedInterface.match}`;
+  if (document.body) document.body.appendChild(toast);
   setTimeout(() => {
-    document.body.removeChild(toast)
-  }, 5000)
-}
+    document.body.removeChild(toast);
+  }, 5000);
+};
 
 const controlFloatPanelButton = () => {
-  console.log('[controlFloatPanelButton]')
+  console.log("[controlFloatPanelButton]");
   // create a button to control the float panel
-  const button = document.createElement('button')
-  button.id = 'ajax-modifier-panel-button'
-  button.innerHTML = 'Ajax KK'
-  button.style.position = 'fixed'
-  button.style.bottom = '10px'
-  button.style.right = '10px'
-  button.style.backgroundColor = '#ccd5ae'
-  button.style.color = 'white'
+  const button = document.createElement("button");
+  button.id = "ajax-modifier-panel-button";
+  button.innerHTML = "Ajax KK";
+  button.style.position = "fixed";
+  button.style.bottom = "10px";
+  button.style.right = "10px";
+  button.style.backgroundColor = "#ccd5ae";
+  button.style.color = "white";
   //font size
-  button.style.fontSize = '12px'
-  button.style.padding = '4px 2px'
+  button.style.fontSize = "12px";
+  button.style.padding = "4px 2px";
   //border none
-  button.style.border = 'none'
+  button.style.border = "none";
   // shadow
-  button.style.boxShadow = '0 0 10px 0 rgba(0, 0, 0, 0.5)'
+  button.style.boxShadow = "0 0 10px 0 rgba(0, 0, 0, 0.5)";
   // hover
-  button.style.cursor = 'pointer'
-  button.style.zIndex = '9999'
-  button.addEventListener('click', () => {
-    const panel = document.getElementById('ajax-modifier-panel')
-    if (panel && panel.style.display !== 'none') {
+  button.style.cursor = "pointer";
+  button.style.zIndex = "9999";
+  button.addEventListener("click", () => {
+    const panel = document.getElementById("ajax-modifier-panel");
+    if (panel && panel.style.display !== "none") {
       // hide the panel
-      hideFloatPanel()
+      hideFloatPanel();
     } else {
       // show the panel
-      showFloatPanel()
+      showFloatPanel();
     }
-  })
+  });
 
-  document.body.appendChild(button)
-}
+  document.body.appendChild(button);
+};
 
 const showFloatPanel = () => {
-  const panel = document.getElementById('ajax-modifier-panel')
+  const panel = document.getElementById("ajax-modifier-panel");
   if (panel) {
-    panel.style.display = 'block'
-    panel.style.opacity = '1'
-    panel.style.zIndex = '9999'
+    panel.style.display = "block";
+    panel.style.opacity = "1";
+    panel.style.zIndex = "9999";
   }
-}
+};
 
 const hideFloatPanel = () => {
-  const panel = document.getElementById('ajax-modifier-panel')
+  const panel = document.getElementById("ajax-modifier-panel");
   if (panel) {
-    panel.style.display = 'none'
-    panel.style.opacity = '0'
-    panel.style.zIndex = '-1'
+    panel.style.display = "none";
+    panel.style.opacity = "0";
+    panel.style.zIndex = "-1";
   }
-}
+};
 
 const hideFloatPanelButton = () => {
-  const button = document.getElementById('ajax-modifier-panel-button')
+  const button = document.getElementById("ajax-modifier-panel-button");
   if (button) {
-    button.style.display = 'none'
+    button.style.display = "none";
   }
-}
+};
 const showFloatPanelButton = () => {
-  const button = document.getElementById('ajax-modifier-panel-button')
+  const button = document.getElementById("ajax-modifier-panel-button");
   if (button) {
-    button.style.display = 'block'
+    button.style.display = "block";
   }
-}
+};
 
 const updateFloatPanelContent = () => {
   // filter the same match
-  const uniqueMatches = [...new Set(AJAX_MODIFIER_KK_PANEL_DATA?.map(item => item.match))]
-  const h2 = document.getElementById('ajax-modifier-panel-title')
-  h2.innerHTML = `AJAx Modifier ${uniqueMatches.length}`
-  const h3Div = document.getElementById('ajax-modifier-panel-h3')
-  h3Div.innerHTML = ''
+  const uniqueMatches = [
+    ...new Set(AJAX_MODIFIER_KK_PANEL_DATA?.map((item) => item.match)),
+  ];
+  const h2 = document.getElementById("ajax-modifier-panel-title");
+  h2.innerHTML = `AJAx Modifier ${uniqueMatches.length}`;
+  const h3Div = document.getElementById("ajax-modifier-panel-h3");
+  h3Div.innerHTML = "";
   uniqueMatches.forEach((item) => {
-    const h3 = document.createElement('h3')
-    h3.innerHTML = `${item}`
-    h3Div.appendChild(h3)
-  })
-}
+    const h3 = document.createElement("h3");
+    h3.innerHTML = `${item}`;
+    h3Div.appendChild(h3);
+  });
+};
 
 const createFloatPanel = () => {
   // if the panel already exists, update data
-  let panel = document.getElementById('ajax-modifier-panel')
+  let panel = document.getElementById("ajax-modifier-panel");
   if (panel) {
-    updateFloatPanelContent()
-    return
+    updateFloatPanelContent();
+    return;
   }
-  panel = document.createElement('div')
-  panel.id = 'ajax-modifier-panel'
-  panel.style.position = 'fixed'
-  panel.style.top = '10px'
-  panel.style.left = '10px'
-  panel.style.backgroundColor = '#d4a373'
-  panel.style.color = 'white'
-  panel.style.padding = '10px'
-  panel.style.zIndex = '9999'
-  panel.style.fontSize = '12px'
+  panel = document.createElement("div");
+  panel.id = "ajax-modifier-panel";
+  panel.style.position = "fixed";
+  panel.style.top = "10px";
+  panel.style.left = "10px";
+  panel.style.backgroundColor = "#d4a373";
+  panel.style.color = "white";
+  panel.style.padding = "10px";
+  panel.style.zIndex = "9999";
+  panel.style.fontSize = "12px";
   // panel.innerHTML = `[AJAx Modifier] matchedInterface: ${matchedInterface.match}`
-  const h2 = document.createElement('h2')
-  h2.id = 'ajax-modifier-panel-title'
-  h2.innerHTML = `AJAx Modifier ${AJAX_MODIFIER_KK_PANEL_DATA?.length}`
-  panel.appendChild(h2)
+  const h2 = document.createElement("h2");
+  h2.id = "ajax-modifier-panel-title";
+  h2.innerHTML = `AJAx Modifier ${AJAX_MODIFIER_KK_PANEL_DATA?.length}`;
+  panel.appendChild(h2);
 
   // put h3 into a div
-  const h3Div = document.createElement('div')
-  h3Div.id = 'ajax-modifier-panel-h3'
+  const h3Div = document.createElement("div");
+  h3Div.id = "ajax-modifier-panel-h3";
   // filter the same match
-  const uniqueMatches = [...new Set(AJAX_MODIFIER_KK_PANEL_DATA?.map(item => item.match))]
+  const uniqueMatches = [
+    ...new Set(AJAX_MODIFIER_KK_PANEL_DATA?.map((item) => item.match)),
+  ];
   uniqueMatches.forEach((item) => {
-    const h3 = document.createElement('h3')
-    h3.innerHTML = `${item.match}`
+    const h3 = document.createElement("h3");
+    h3.innerHTML = `${item.match}`;
     // add button to copy the matchedInterface
-    const button = document.createElement('button')
-    button.innerHTML = 'Copy'
-    button.addEventListener('click', () => {
-      navigator.clipboard.writeText(item.match)
-    })
-    h3.appendChild(button)
-    h3Div.appendChild(h3)
-  })
-  panel.appendChild(h3Div)
+    const button = document.createElement("button");
+    button.innerHTML = "Copy";
+    button.addEventListener("click", () => {
+      navigator.clipboard.writeText(item.match);
+    });
+    h3.appendChild(button);
+    h3Div.appendChild(h3);
+  });
+  panel.appendChild(h3Div);
 
-  document.body.appendChild(panel)
-}
+  document.body.appendChild(panel);
+};
 
 // Sync switch status from storage on page load
-if (chrome && chrome.storage && chrome.storage.local) {
-  chrome.storage.local.get(['ajaxInterceptor_switchOn'], (result) => {
-    console.log('【Ajax Modifier in chrome.storage.local】', result)
-    const switchOn = result.ajaxInterceptor_switchOn;
-    if (switchOn) {
-      window.XMLHttpRequest = ajax_interceptor_qoweifjqon.myXHR;
-      window.fetch = ajax_interceptor_qoweifjqon.myFetch;
+const initializeAjaxInterceptor = () => {
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    // Listen for changes to ajaxInterceptor_switchOn
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+      console.log(
+        "【Ajax Modifier in chrome.storage.onChanged】",
+        changes,
+        namespace
+      );
+      if (namespace === "local" && changes.ajaxInterceptor_switchOn) {
+        const switchOn = changes.ajaxInterceptor_switchOn.newValue;
+        console.log(
+          "【Ajax Modifier switch changed】",
+          switchOn,
+          ajax_interceptor.myFetch(),
+          ajax_interceptor.myXHR()
+        );
+        ajax_interceptor.settings.ajaxInterceptor_switchOn = switchOn;
+        if (switchOn) {
+          // window.XMLHttpRequest = ajax_interceptor.myXHR;
+          // window.fetch = ajax_interceptor.myFetch;
+
+          setTimeout(() => {
+            if (
+              window.XMLHttpRequest.name.includes("Xhook") ||
+              window.fetch.name.includes("Xhook")
+            ) {
+              console.log(
+                "【Ajax Modifier】Detected xhook, overriding it now."
+              );
+              window.XMLHttpRequest = ajax_interceptor.myXHR;
+              window.fetch = ajax_interceptor.myFetch;
+            }
+          }, 0);
+        } else {
+          window.XMLHttpRequest = ajax_interceptor.originalXHR;
+          window.fetch = ajax_interceptor.originalFetch;
+        }
+      }
+    });
+
+    // Initial state check
+    chrome.storage.local.get(["ajaxInterceptor_switchOn"], (result) => {
+      console.log(
+        "【Ajax Modifier in chrome.storage.local】",
+        result,
+        ajax_interceptor
+      );
+      const switchOn = result.ajaxInterceptor_switchOn;
+      ajax_interceptor.settings.ajaxInterceptor_switchOn = switchOn;
+      if (switchOn) {
+        setTimeout(() => {
+          if (
+            window.XMLHttpRequest.name.includes("Xhook") ||
+            window.fetch.name.includes("Xhook")
+          ) {
+            console.log("【Ajax Modifier】Detected xhook, overriding it now.");
+            window.XMLHttpRequest = ajax_interceptor.myXHR;
+            window.fetch = ajax_interceptor.myFetch;
+          }
+        }, 0);
+      } else {
+        AJAX_MODIFIER_KK_PANEL_DATA.length = 0;
+        hideFloatPanel();
+        hideFloatPanelButton();
+        window.XMLHttpRequest = ajax_interceptor.originalXHR;
+        window.fetch = ajax_interceptor.originalFetch;
+      }
+    });
+
+    setTimeout(() => {
+      console.log(window.XMLHttpRequest, window.fetch);
+    }, 5000);
+  }
+};
+window.XMLHttpRequest = ajax_interceptor.myXHR;
+window.fetch = ajax_interceptor.myFetch;
+// Initialize only after the original XHR and fetch are stored
+// ajax_interceptor.originalXHR = window.XMLHttpRequest;
+// ajax_interceptor.originalFetch = window.fetch.bind(window);
+window.onload = () => {
+  console.log(
+    "【Ajax Modifier】Overriding XMLHttpRequest:",
+    window.XMLHttpRequest.toString()
+  );
+  console.log("【Ajax Modifier】Overriding fetch:", window.fetch.toString());
+  initializeAjaxInterceptor();
+};
+
+window.addEventListener(
+  "message",
+  function (event) {
+    const data = event.data;
+    // console.log('data from content_script main.js', data)
+
+    if (data.type === "ajaxInterceptor" && data.to === "pageScript") {
+      ajax_interceptor.settings[data.key] = data.value;
+
+      // compare if ajaxInterceptor_rules includes window.location.host
+      console.log(ajax_interceptor.settings.ajaxInterceptor_rules);
+      if (
+        ajax_interceptor.settings.ajaxInterceptor_rules.some((item) =>
+          item.match.includes(window.location.host)
+        )
+      ) {
+        controlFloatPanelButton();
+        createFloatPanel();
+      }
+    }
+
+    if (ajax_interceptor.settings.ajaxInterceptor_switchOn) {
+      showFloatPanelButton();
     } else {
-      window.XMLHttpRequest = ajax_interceptor_qoweifjqon.originalXHR;
-      window.fetch = ajax_interceptor_qoweifjqon.originalFetch;
+      hideFloatPanelButton();
+      hideFloatPanel();
     }
-  });
-} else {
-  // fallback: default to custom implementations if chrome.storage is not available
-  window.XMLHttpRequest = ajax_interceptor_qoweifjqon.myXHR;
-  window.fetch = ajax_interceptor_qoweifjqon.myFetch;
-}
-
-window.addEventListener("message", function (event) {
-
-  const data = event.data
-  // console.log('data from content_script main.js', data)
-
-  if (data.type === 'ajaxInterceptor' && data.to === 'pageScript') {
-    console.log('data?', data, this.window.fetch)
-    ajax_interceptor_qoweifjqon.settings[data.key] = data.value
-
-
-    // compare if ajaxInterceptor_rules includes window.location.host
-    console.log(ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules)
-    if (ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules.some(item => item.match.includes(window.location.host))) {
-      controlFloatPanelButton()
-      createFloatPanel()
-    }
-  }
-
-  if (ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_switchOn) {
-    showFloatPanelButton()
-  } else {
-    hideFloatPanelButton()
-    hideFloatPanel()
-  }
-}, false)
+  },
+  false
+);
