@@ -28,11 +28,11 @@ import MonacoEditor from './components/Editor/index'
 import JSONPretty from 'react-json-pretty';
 import { FaFileExport, FaFileImport } from "react-icons/fa";
 import { JsonEditor } from 'json-edit-react'
-import { BiSolidLock } from "react-icons/bi";
+import { BiSolidLock, BiSolidLockOpen } from "react-icons/bi";
 import { AnimatePresence, motion } from "motion/react"
 import { IconType } from 'react-icons';
 import { MdContentPaste } from "react-icons/md";
-
+import { MdOutlineRefresh } from "react-icons/md";
 
 const { Panel } = Collapse;
 const { Option } = Select;
@@ -823,7 +823,7 @@ const App = () => {
             // transition={{ duration: 0.3, type: "spring",delay: 1.5 }}
             >
               <div className='lock-btn small' onClick={handleSwitchChange}>
-                <IconComponent icon={BiSolidLock} />
+                <IconComponent icon={switchOn ? BiSolidLockOpen : BiSolidLock} />
               </div>
               <div style={{
                 display: 'flex',
@@ -844,12 +844,6 @@ const App = () => {
                   placeholder="Search by url"
                   onPressEnter={handleUrlSearch}
                 />
-                <Button style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 4,
-                }} color="primary" variant="filled" onClick={() => handleExportRules()} icon={<ExportOutlined />} />
-
                 <Upload {...uploadProps}>
                   <Button
                     style={{
@@ -861,6 +855,12 @@ const App = () => {
                     icon={<IconComponent icon={FaFileImport} style={{ marginBottom: -1 }} />}
                   />
                 </Upload>
+                <Button style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 4,
+                }} color="primary" variant="filled" onClick={() => handleExportRules()} icon={<IconComponent icon={FaFileExport} style={{ marginBottom: -1 }} />} />
+
                 <Button type="primary" onClick={handleAddNewRule}>
                   <PlusOutlined />
                   Add Rule
@@ -961,16 +961,17 @@ const App = () => {
                         }
                       }}
                     />
-                    <Button type="primary" icon={<IconComponent icon={MdContentPaste} />} onClick={() => {
-                      navigator.clipboard.readText().then(text => {
+                    <Button type="primary" icon={<IconComponent icon={MdOutlineRefresh} />} onClick={() => {
                         if (currentEditRule) {
-                          setCurrentEditRule({ ...currentEditRule, label: text });
+                          setCurrentEditRule({ ...currentEditRule, label: currentEditRule.match.split('/')[currentEditRule.match.split('/').length - 1] });
                         }
-                      });
-                      message.success('Paste from clipboard');
+                      message.success('Refresh from match');
                     }}></Button>
                   </Space.Compact>
                   <Typography.Title level={4}>Match:</Typography.Title>
+                  <Space.Compact style={{
+                    width: '100%',
+                  }}>
                   <Input.TextArea
                     rows={10}
                     style={{
@@ -980,10 +981,24 @@ const App = () => {
                     value={currentEditRule?.match || ''}
                     onChange={(e) => {
                       if (currentEditRule) {
-                        setCurrentEditRule({ ...currentEditRule, match: e.target.value });
+                        let newItem = { ...currentEditRule, match: e.target.value };
+                        if(!currentEditRule.label){
+                          newItem.label = e.target.value.split('/')[e.target.value.split('/').length - 1]
+                        }
+                        console.log(newItem);
+                        setCurrentEditRule(newItem);
                       }
                     }}
                   />
+                  <Button type="primary" icon={<IconComponent icon={MdContentPaste} />} onClick={() => {
+                      navigator.clipboard.readText().then(text => {
+                        if (currentEditRule) {
+                          setCurrentEditRule({ ...currentEditRule, match: text });
+                        }
+                      });
+                      message.success('Paste from clipboard');
+                    }}></Button>
+                  </Space.Compact>
                   {duplicateMatch.length > 0 && isCreating && (
                     <Collapse
                       size="small"

@@ -1,6 +1,10 @@
 let contentLoadedIds = []
 let lastPanelPosition = 0
 
+// Add click handler for extension icon
+chrome.action.onClicked.addListener(() => {
+  chrome.tabs.create({ url: 'mainpanel.html' });
+});
 chrome.scripting.getRegisteredContentScripts({ ids: ["testing-scripts-gen"] },
   async (scripts) => {
     if (scripts && scripts.length) {
@@ -19,13 +23,6 @@ chrome.scripting.getRegisteredContentScripts({ ids: ["testing-scripts-gen"] },
       }])
   }
 )
-
-chrome.action.onClicked.addListener(function (tab) {
-  console.log('Action clicked')
-  chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-    handleContentSend(tabs[0].id, "toggle")
-  })
-})
 
 // 页面关闭，移除id
 chrome.tabs.onRemoved.addListener(function (tabId) {
