@@ -45,7 +45,6 @@ function handleContentSend(tabId, params = null) {
 // 接收iframe传来的信息，转发给content.js
 chrome.runtime.onMessage.addListener(msg => {
   if (msg.type === 'ajaxInterceptor' && msg.to === 'background') {
-    console.log(msg)
     if (msg.hasOwnProperty('contentScriptLoaded')) {
       msg.contentScriptLoaded && chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
         tabs && tabs.length && !contentLoadedIds.includes(tabs[0].id) && contentLoadedIds.push(tabs[0].id)

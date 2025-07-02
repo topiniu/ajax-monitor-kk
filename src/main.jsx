@@ -8,10 +8,6 @@ let ajax_interceptor = {
   },
   // 获取匹配到的规则项
   getMatchedInterface: ({ thisRequestUrl = "", thisMethod = "" }) => {
-    console.log(
-      "【Ajax Modifier in getMatchedInterface】thisRequestUrl",
-      thisRequestUrl
-    );
     return ajax_interceptor.settings.ajaxInterceptor_rules.find((item) => {
       let {
         filterType = "normal",
@@ -80,18 +76,16 @@ let ajax_interceptor = {
   },
   originalXHR: window.XMLHttpRequest,
   myXHR: function () {
-    // console.log("【Ajax Modifier in xhr】self", self);
     let pageScriptEventDispatched = false;
     const self = this; // Capture the custom wrapper context
     if (!ajax_interceptor.settings.ajaxInterceptor_switchOn) {
-      return ajax_interceptor.originalXHR();
+      return new ajax_interceptor.originalXHR();
     }
     const modifyResponse = function () {
       const [method, requestUrl] = self._openArgs;
       const queryParams = ajax_interceptor.getRequestParams(requestUrl);
       const [requestPayload] = self._sendArgs;
       const matchedInterface = self._matchedInterface;
-      console.log("【Ajax Modifier in xhr】matchedInterface", matchedInterface);
       if (
         matchedInterface &&
         (matchedInterface.overrideTxt || matchedInterface.overrideResponseFunc)
@@ -199,10 +193,6 @@ let ajax_interceptor = {
             thisRequestUrl: ajax_interceptor.getCompleteUrl(requestUrl),
             thisMethod: method,
           });
-          console.log(
-            "【Ajax Modifier in xhr】self._matchedInterface",
-            self._matchedInterface
-          );
           const matchedInterface = self._matchedInterface;
           // modify request
           if (matchedInterface) {
@@ -310,7 +300,6 @@ let ajax_interceptor = {
   },
   originalFetch: window.fetch.bind(window),
   myFetch: function (...args) {
-    console.log("【Ajax Modifier in fetch】args", args);
     if (!ajax_interceptor.settings.ajaxInterceptor_switchOn) {
       return ajax_interceptor.originalFetch(...args);
     }
@@ -338,13 +327,11 @@ let ajax_interceptor = {
     } else if (typeof requestUrl === "object") {
       inputUrl = requestUrl.url || "";
     }
-    console.log("[看看]inputUrl", inputUrl);
 
     const matchedInterface = ajax_interceptor.getMatchedInterface({
       thisRequestUrl: ajax_interceptor.getCompleteUrl(inputUrl),
       thisMethod: data && data.method,
     });
-    console.log("[看看]matchedInterface", matchedInterface);
     if (matchedInterface && args) {
       AJAX_MODIFIER_KK_PANEL_DATA.push(matchedInterface);
       updateFloatPanelContent();
@@ -384,7 +371,6 @@ let ajax_interceptor = {
       }
     }
     return ajax_interceptor.originalFetch(...args).then(async (response) => {
-      console.log("【Ajax Modifier in fetch】response", response);
       if (
         matchedInterface &&
         (matchedInterface.overrideTxt || matchedInterface.overrideResponseFunc)
@@ -522,7 +508,6 @@ const toastMessage = (matchedInterface) => {
 };
 
 const controlFloatPanelButton = () => {
-  console.log("[controlFloatPanelButton]");
   // create a button to control the float panel
   const button = document.createElement("button");
   button.id = "ajax-modifier-panel-button";
@@ -655,19 +640,8 @@ const initializeAjaxInterceptor = () => {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
     // Listen for changes to ajaxInterceptor_switchOn
     chrome.storage.onChanged.addListener((changes, namespace) => {
-      console.log(
-        "【Ajax Modifier in chrome.storage.onChanged】",
-        changes,
-        namespace
-      );
       if (namespace === "local" && changes.ajaxInterceptor_switchOn) {
         const switchOn = changes.ajaxInterceptor_switchOn.newValue;
-        console.log(
-          "【Ajax Modifier switch changed】",
-          switchOn,
-          ajax_interceptor.myFetch(),
-          ajax_interceptor.myXHR()
-        );
         ajax_interceptor.settings.ajaxInterceptor_switchOn = switchOn;
         if (switchOn) {
           // window.XMLHttpRequest = ajax_interceptor.myXHR;
@@ -678,9 +652,6 @@ const initializeAjaxInterceptor = () => {
               window.XMLHttpRequest.name.includes("Xhook") ||
               window.fetch.name.includes("Xhook")
             ) {
-              console.log(
-                "【Ajax Modifier】Detected xhook, overriding it now."
-              );
               window.XMLHttpRequest = ajax_interceptor.myXHR;
               window.fetch = ajax_interceptor.myFetch;
             }
@@ -694,11 +665,6 @@ const initializeAjaxInterceptor = () => {
 
     // Initial state check
     chrome.storage.local.get(["ajaxInterceptor_switchOn"], (result) => {
-      console.log(
-        "【Ajax Modifier in chrome.storage.local】",
-        result,
-        ajax_interceptor
-      );
       const switchOn = result.ajaxInterceptor_switchOn;
       ajax_interceptor.settings.ajaxInterceptor_switchOn = switchOn;
       if (switchOn) {
@@ -707,7 +673,6 @@ const initializeAjaxInterceptor = () => {
             window.XMLHttpRequest.name.includes("Xhook") ||
             window.fetch.name.includes("Xhook")
           ) {
-            console.log("【Ajax Modifier】Detected xhook, overriding it now.");
             window.XMLHttpRequest = ajax_interceptor.myXHR;
             window.fetch = ajax_interceptor.myFetch;
           }
@@ -720,10 +685,6 @@ const initializeAjaxInterceptor = () => {
         window.fetch = ajax_interceptor.originalFetch;
       }
     });
-
-    setTimeout(() => {
-      console.log(window.XMLHttpRequest, window.fetch);
-    }, 5000);
   }
 };
 window.XMLHttpRequest = ajax_interceptor.myXHR;
@@ -732,11 +693,6 @@ window.fetch = ajax_interceptor.myFetch;
 // ajax_interceptor.originalXHR = window.XMLHttpRequest;
 // ajax_interceptor.originalFetch = window.fetch.bind(window);
 window.onload = () => {
-  console.log(
-    "【Ajax Modifier】Overriding XMLHttpRequest:",
-    window.XMLHttpRequest.toString()
-  );
-  console.log("【Ajax Modifier】Overriding fetch:", window.fetch.toString());
   initializeAjaxInterceptor();
 };
 
@@ -744,13 +700,11 @@ window.addEventListener(
   "message",
   function (event) {
     const data = event.data;
-    // console.log('data from content_script main.js', data)
 
     if (data.type === "ajaxInterceptor" && data.to === "pageScript") {
       ajax_interceptor.settings[data.key] = data.value;
 
       // compare if ajaxInterceptor_rules includes window.location.host
-      console.log(ajax_interceptor.settings.ajaxInterceptor_rules);
       if (
         ajax_interceptor.settings.ajaxInterceptor_rules.some((item) =>
           item.match.includes(window.location.host)

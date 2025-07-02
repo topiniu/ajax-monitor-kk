@@ -8,7 +8,6 @@
 // s1.setAttribute('src', chrome.runtime.getURL('pageScripts/defaultSettings.js'))
 // document.documentElement.appendChild(s1)
 
-console.log('content_script.js')
 // 在页面上插入代码
 const script = document.createElement('script')
 script.setAttribute('type', 'text/javascript')
