@@ -513,8 +513,8 @@ const controlFloatPanelButton = () => {
   button.id = "ajax-modifier-panel-button";
   button.innerHTML = "Ajax KK";
   button.style.position = "fixed";
-  button.style.bottom = "10px";
-  button.style.right = "10px";
+  button.style.top = "10px";
+  button.style.left = "10px";
   button.style.backgroundColor = "#ccd5ae";
   button.style.color = "white";
   //font size
@@ -522,6 +522,7 @@ const controlFloatPanelButton = () => {
   button.style.padding = "4px 2px";
   //border none
   button.style.border = "none";
+  button.style.borderRadius = "5px";
   // shadow
   button.style.boxShadow = "0 0 10px 0 rgba(0, 0, 0, 0.5)";
   // hover
@@ -531,6 +532,7 @@ const controlFloatPanelButton = () => {
     const panel = document.getElementById("ajax-modifier-panel");
     if (panel && panel.style.display !== "none") {
       // hide the panel
+
       hideFloatPanel();
     } else {
       // show the panel
