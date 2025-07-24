@@ -580,8 +580,15 @@ const updateFloatPanelContent = () => {
     ...new Set(AJAX_MODIFIER_KK_PANEL_DATA?.map((item) => item.match)),
   ];
   const h2 = document.getElementById("ajax-modifier-panel-title");
+  if (!h2) {
+    console.log("[AJAx Modifier] h2 not found");
+    return;
+  }
   h2.innerHTML = `AJAx Modifier ${uniqueMatches.length}`;
   const h3Div = document.getElementById("ajax-modifier-panel-h3");
+  if (!h3Div) {
+    return;
+  }
   h3Div.innerHTML = "";
   uniqueMatches.forEach((item) => {
     const h3 = document.createElement("h3");
@@ -593,6 +600,7 @@ const updateFloatPanelContent = () => {
 const createFloatPanel = () => {
   // if the panel already exists, update data
   let panel = document.getElementById("ajax-modifier-panel");
+  console.log("[AJAx Modifier] panel", panel);
   if (panel) {
     updateFloatPanelContent();
     return;
