@@ -102,7 +102,7 @@ document.documentElement.appendChild(script)
 script.addEventListener('load', () => {
   console.log("[AJAx Modifier] script loaded");
   controlFloatPanelButton();
-  createFloatPanel();
+  // createFloatPanel();
   chrome.storage.local.get(['ajaxInterceptor_switchOn', 'ajaxInterceptor_rules'], (result) => {
     if (result.hasOwnProperty('ajaxInterceptor_switchOn')) {
       postMessage({type: 'ajaxInterceptor', to: 'pageScript', key: 'ajaxInterceptor_switchOn', value: result.ajaxInterceptor_switchOn})
