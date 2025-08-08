@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>通用 JSON 测试数据生成器</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- TailwindCSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- JSON Viewer -->
+    <script src="https://cdn.jsdelivr.net/npm/json-viewer-js@latest/dist/json-viewer.min.js"></script>
+    <link
+      href="https://cdn.jsdelivr.net/npm/json-viewer-js@latest/dist/json-viewer.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body
+    class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 p-6 min-h-screen"
+  >
+    <div class="max-w-6xl mx-auto space-y-6">
+      <h1 class="text-3xl font-bold mb-4">通用 JSON 测试数据生成器</h1>
+
+      <div class="space-y-4">
+        <label class="block text-lg font-medium">粘贴你的 columns 配置：</label>
+        <textarea
+          id="columnsInput"
+          class="w-full h-64 p-4 rounded border border-gray-300 dark:bg-gray-800 dark:text-white font-mono text-sm"
+          placeholder="粘贴包含 dataIndex 的 columns 数组..."
+        ></textarea>
+
+        <button
+          onclick="handleGenerate()"
+          class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+        >
+          生成测试数据
+        </button>
+      </div>
+
+      <div id="jsonSection" class="hidden">
+        <div class="flex justify-between items-center mt-6 mb-2">
+          <h2 class="text-xl font-semibold">生成结果</h2>
+          <button
+            onclick="copyJSON()"
+            class="bg-green-600 text-white px-4 py-1.5 rounded hover:bg-green-700 transition"
+          >
+            复制 JSON
+          </button>
+        </div>
+        <div id="jsonViewer" class="overflow-auto max-h-[600px] text-sm"></div>
+      </div>
+    </div>
+    <script>
+      let jsonData = [];
+
+      function handleGenerate() {
+        const input = document.getElementById("columnsInput").value;
+
+        try {
+          // Extract only objects and keep only `dataIndex` keys
+          const matches = input.match(/dataIndex\s*:\s*['"`](\w+)['"`]/g);
+          if (!matches) throw new Error("无法从 columns 中提取字段 dataIndex");
+
+          const fields = matches.map(
+            (line) => line.match(/['"`](\w+)['"`]/)[1]
+          );
+
+          jsonData = Array.from({ length: 10 }, (_, i) => {
+            const obj = { uuid: `uuid-${crypto.randomUUID()}` };
+            for (const field of fields) {
+              obj[field] = mockValue(field, i + 1);
+            }
+            return obj;
+          });
+
+          const viewer = new JSONViewer({ collapsed: false });
+          const viewerContainer = document.getElementById("jsonViewer");
+          viewerContainer.innerHTML = "";
+          viewerContainer.appendChild(viewer.getContainer());
+          viewer.showJSON(jsonData);
+
+          document.getElementById("jsonSection").classList.remove("hidden");
+        } catch (err) {
+          alert("❌ 解析失败：" + err.message);
+        }
+      }
+
+      function mockValue(field, i) {
+        const lower = field.toLowerCase();
+
+        if (lower.includes("id")) return `ID-${i.toString().padStart(4, "0")}`;
+        if (lower.includes("name")) return `示例名称-${i}`;
+        if (lower.includes("code"))
+          return `CODE-${Math.random().toString(36).substring(2, 10)}`;
+        if (lower.includes("date") || lower.includes("time"))
+          return `2025-08-${String(i).padStart(2, "0")}`;
+        if (lower.includes("location")) return `地区-${i}`;
+        if (lower.includes("status")) return ["正常", "关闭", "异常"][i % 3];
+        if (lower.includes("count")) return Math.floor(Math.random() * 10);
+        if (lower.startsWith("is") || lower.startsWith("has"))
+          return Math.random() > 0.5;
+        if (lower.includes("store") || lower.includes("product"))
+          return [`示例-${i}`, `样例-${i + 1}`];
+
+        return `值-${i}`;
+      }
+
+      function copyJSON() {
+        navigator.clipboard
+          .writeText(JSON.stringify(jsonData, null, 2))
+          .then(() => alert("✅ 已复制 JSON 到剪贴板！"));
+      }
+    </script>
+  </body>
+</html>

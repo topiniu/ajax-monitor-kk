@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useReducer,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   Switch,
@@ -22,25 +28,35 @@ import {
   Typography,
   Spin,
   Alert,
-} from 'antd';
-import { MinusOutlined, EditOutlined, PlusOutlined, DeleteOutlined, ReloadOutlined, ExportOutlined, CopyOutlined } from '@ant-design/icons';
-import MonacoEditor from './components/Editor/index'
-import JSONPretty from 'react-json-pretty';
+} from "antd";
+import {
+  MinusOutlined,
+  EditOutlined,
+  PlusOutlined,
+  DeleteOutlined,
+  ReloadOutlined,
+  ExportOutlined,
+  CopyOutlined,
+  ToolFilled,
+} from "@ant-design/icons";
+import MonacoEditor from "./components/Editor/index";
+import JSONPretty from "react-json-pretty";
 import { FaFileExport, FaFileImport } from "react-icons/fa";
-import { JsonEditor } from 'json-edit-react'
+import { JsonEditor } from "json-edit-react";
 import { BiSolidLock, BiSolidLockOpen } from "react-icons/bi";
-import { AnimatePresence, motion } from "motion/react"
-import { IconType } from 'react-icons';
+import { AnimatePresence, motion } from "motion/react";
+import { IconType } from "react-icons";
 import { MdContentPaste } from "react-icons/md";
 import { MdOutlineRefresh } from "react-icons/md";
 
 const { Panel } = Collapse;
 const { Option } = Select;
 
-import Replacer from './components/Replacer';
+import Replacer from "./components/Replacer";
 
-import './index.less';
-import { Rnd } from 'react-rnd';
+import "./index.less";
+import { Rnd } from "react-rnd";
+
 
 type DataList = {
   [tabId: string]: AjaxInterceptorRule[];
@@ -48,9 +64,9 @@ type DataList = {
 
 const buildUUID = () => {
   const dt = new Date().getTime();
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (dt + Math.random() * 16) % 16 | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
   });
 };
 
@@ -58,77 +74,113 @@ const generateUniqueId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 };
 
+// Generate fake values based on dataIndex field names
+function mockValue(field: string, i: number): any {
+  const lower = field.toLowerCase()
+  if (lower.includes('id')) return `ID-${i.toString().padStart(4, '0')}`
+  if (lower.includes('name')) return `名称-${i}`
+  if (lower.includes('code')) return `CODE-${Math.random().toString(36).slice(2, 10)}`
+  if (lower.includes('date') || lower.includes('time')) return `2025-08-${String(i).padStart(2, '0')}`
+  if (lower.includes('location')) return `地区-${i}`
+  if (lower.includes('status')) return ['正常', '关闭', '异常'][i % 3]
+  if (lower.includes('count')) return Math.floor(Math.random() * 10)
+  if (lower.startsWith('is') || lower.startsWith('has')) return Math.random() > 0.5
+  if (lower.includes('store') || lower.includes('product')) return [`示例-${i}`, `样例-${i + 1}`]
+  return `值-${i}`
+}
+
 // @ts-ignore
-const IconComponent = ({ icon: Icon, ...props }: { icon: IconType, [key: string]: any }) => <Icon {...props} />;
+const IconComponent = ({
+  icon: Icon,
+  ...props
+}: {
+  icon: IconType;
+  [key: string]: any;
+  // @ts-ignore
+}) => <Icon {...props} />;
 
 const App = () => {
   const [interceptedRequests, setInterceptedRequests] = useState({});
   const [showAllRules, setShowAllRules] = useState(false);
-  const [positionClass, setPositionClass] = useState('suspend');
+  const [positionClass, setPositionClass] = useState("suspend");
   const [customFunction, setCustomFunction] = useState({ panelPosition: 0 });
   const [showRefreshTip, setShowRefreshTip] = useState(false);
-  const [searchName, setSearchName] = useState('');
-  const [newTabName, setNewTabName] = useState('');
-  const [searchUrl, setSearchUrl] = useState('');
+  const [searchName, setSearchName] = useState("");
+  const [newTabName, setNewTabName] = useState("");
+  const [searchUrl, setSearchUrl] = useState("");
   const forceUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [, forceUpdate] = useReducer(x => x + 1, 0);
+  const [, forceUpdate] = useReducer((x) => x + 1, 0);
   const [activeKey, setActiveKey] = useState<string | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);
 
   const [switchOn, setSwitchOn] = useState(false);
   const [rules, setRules] = useState<AjaxInterceptorRule[]>([]);
   const [dataList, setDataList] = useState<DataList>({});
-  const [duplicateMatch, setDuplicateMatch] = useState<AjaxInterceptorRule[]>([]);
+  const [duplicateMatch, setDuplicateMatch] = useState<AjaxInterceptorRule[]>(
+    []
+  );
+  const [columnsInput, setColumnsInput] = useState('');
 
   const tableBoxRef = useRef<HTMLDivElement>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [tableBoxHeight, setTableBoxHeight] = useState(0);
   const [showDetail, setShowDetail] = useState(false);
-  const [currentEditRule, setCurrentEditRule] = useState<AjaxInterceptorRule | null>(null);
+  const [currentEditRule, setCurrentEditRule] =
+    useState<AjaxInterceptorRule | null>(null);
   useEffect(() => {
     if (tableBoxRef.current) {
-      setTableBoxHeight(window.innerHeight - tableBoxRef.current.offsetTop - 34);
+      setTableBoxHeight(
+        window.innerHeight - tableBoxRef.current.offsetTop - 34
+      );
     }
   }, [tableBoxRef.current, switchOn]);
 
   const readRulesFromStorage = () => {
     return new Promise((resolve, reject) => {
-      chrome.storage.local.get(['ajaxInterceptor_rules'], (result) => {
+      chrome.storage.local.get(["ajaxInterceptor_rules"], (result) => {
         // setRules(result.ajaxInterceptor_rules || []);
-        resolve(result.ajaxInterceptor_rules as any || []);
+        resolve((result.ajaxInterceptor_rules as any) || []);
       });
     });
   };
 
   useEffect(() => {
-    chrome.storage.local.get(['ajaxInterceptor_switchOn', 'ajaxInterceptor_rules', 'customFunction'], (result) => {
-      setSwitchOn(result.ajaxInterceptor_switchOn || false);
+    chrome.storage.local.get(
+      ["ajaxInterceptor_switchOn", "ajaxInterceptor_rules", "customFunction"],
+      (result) => {
+        setSwitchOn(result.ajaxInterceptor_switchOn || false);
 
-      // Initialize default rule if no rules exist
-      if (!result.ajaxInterceptor_rules || result.ajaxInterceptor_rules.length === 0) {
-        const defaultRule: AjaxInterceptorRule = {
-          id: generateUniqueId(),
-          match: '',
-          label: 'Default Rule',
-          switchOn: true,
-          key: buildUUID(),
-          tabId: 'Default',
-        };
-        const defaultRules = [defaultRule];
-        setRules(defaultRules);
-        // set('ajaxInterceptor_rules', defaultRules);
-      } else {
-        setRules(result.ajaxInterceptor_rules);
+        // Initialize default rule if no rules exist
+        if (
+          !result.ajaxInterceptor_rules ||
+          result.ajaxInterceptor_rules.length === 0
+        ) {
+          const defaultRule: AjaxInterceptorRule = {
+            id: generateUniqueId(),
+            match: "",
+            label: "Default Rule",
+            switchOn: true,
+            key: buildUUID(),
+            tabId: "Default",
+          };
+          const defaultRules = [defaultRule];
+          setRules(defaultRules);
+          // set('ajaxInterceptor_rules', defaultRules);
+        } else {
+          setRules(result.ajaxInterceptor_rules);
+        }
+
+        setCustomFunction(result.customFunction || { panelPosition: 0 });
+        setIsLoading(false);
       }
+    );
 
-      setCustomFunction(result.customFunction || { panelPosition: 0 });
-      setIsLoading(false);
-    });
-
-    window.addEventListener('resize', () => {
+    window.addEventListener("resize", () => {
       if (tableBoxRef.current) {
-        setTableBoxHeight(window.innerHeight - tableBoxRef.current.offsetTop - 34);
+        setTableBoxHeight(
+          window.innerHeight - tableBoxRef.current.offsetTop - 34
+        );
       }
     });
 
@@ -138,7 +190,7 @@ const App = () => {
 
   const groupRulesByTab = useCallback(() => {
     const groupedRules = rules.reduce((acc, rule) => {
-      const tab = rule.tabId || 'Default';
+      const tab = rule.tabId || "Default";
       if (!acc[tab]) {
         acc[tab] = [];
       }
@@ -147,7 +199,7 @@ const App = () => {
     }, {} as DataList);
 
     if (Object.keys(groupedRules).length === 0) {
-      groupedRules['Default'] = [];
+      groupedRules["Default"] = [];
     }
 
     setDataList(groupedRules);
@@ -168,33 +220,33 @@ const App = () => {
   };
 
   const uploadProps: any = {
-    name: 'file',
-    action: '#',
-    accept: '.json',
+    name: "file",
+    action: "#",
+    accept: ".json",
     showUploadList: false,
     beforeUpload(file) {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
           const jsonDatabase = JSON.parse(e.target?.result as string);
-          console.log('jsonDatabase', jsonDatabase);
+          console.log("jsonDatabase", jsonDatabase);
           if (jsonDatabase.length > 0) {
-            jsonDatabase.forEach(rule => {
+            jsonDatabase.forEach((rule) => {
               try {
                 rule.overrideTxt = JSON.stringify(rule.overrideTxt);
               } catch (error) {
-                rule.overrideTxt = '{}'
+                rule.overrideTxt = "{}";
               }
             });
             setRules(jsonDatabase);
-            set('ajaxInterceptor_rules', jsonDatabase);
+            set("ajaxInterceptor_rules", jsonDatabase);
             groupRulesByTab();
             message.success(`${file.name} uploaded successfully`);
           } else {
-            message.error('Failed to parse JSON file');
+            message.error("Failed to parse JSON file");
           }
         } catch (error) {
-          message.error('Failed to parse JSON file');
+          message.error("Failed to parse JSON file");
           console.error(error);
         }
       };
@@ -202,47 +254,50 @@ const App = () => {
       return false; // Prevent default upload behavior
     },
     onChange(info) {
-      if (info.file.status !== 'uploading') {
+      if (info.file.status !== "uploading") {
         console.log(info.file, info.fileList);
       }
     },
   };
 
-  const handleIncomingMessage = useCallback(({
-    type,
-    to,
-    url,
-    match,
-    contentScriptLoaded = false,
-    showFreshTip = false,
-  }) => {
-    if (type === 'ajaxInterceptor' && to === 'iframe') {
-      if (contentScriptLoaded || showFreshTip) {
-        setShowRefreshTip(showFreshTip);
-        return;
-      }
-      setInterceptedRequests(prev => {
-        const newRequests = { ...prev };
-        if (!newRequests[match]) newRequests[match] = [];
-        const exists = newRequests[match].some(obj => {
-          if (obj.url === url) {
-            obj.num++;
-            return true;
-          }
-          return false;
-        });
-        if (!exists) {
-          newRequests[match].push({ url, num: 1 });
+  const handleIncomingMessage = useCallback(
+    ({
+      type,
+      to,
+      url,
+      match,
+      contentScriptLoaded = false,
+      showFreshTip = false,
+    }) => {
+      if (type === "ajaxInterceptor" && to === "iframe") {
+        if (contentScriptLoaded || showFreshTip) {
+          setShowRefreshTip(showFreshTip);
+          return;
         }
-        return newRequests;
-      });
-    }
-  }, []);
+        setInterceptedRequests((prev) => {
+          const newRequests = { ...prev };
+          if (!newRequests[match]) newRequests[match] = [];
+          const exists = newRequests[match].some((obj) => {
+            if (obj.url === url) {
+              obj.num++;
+              return true;
+            }
+            return false;
+          });
+          if (!exists) {
+            newRequests[match].push({ url, num: 1 });
+          }
+          return newRequests;
+        });
+      }
+    },
+    []
+  );
 
   const notifyBackgroundScriptLoaded = () => {
     chrome.runtime.sendMessage(chrome.runtime.id, {
-      type: 'ajaxInterceptor',
-      to: 'background',
+      type: "ajaxInterceptor",
+      to: "background",
       iframeScriptLoaded: true,
     });
   };
@@ -253,8 +308,8 @@ const App = () => {
     chrome.storage?.local.set({ [key]: value }, () => {
       console.log(`[set] key: ${key}, value: ${value}`);
       chrome.runtime.sendMessage(chrome.runtime.id, {
-        type: 'ajaxInterceptor',
-        to: 'background',
+        type: "ajaxInterceptor",
+        to: "background",
         key,
         value,
       });
@@ -272,80 +327,85 @@ const App = () => {
   };
 
   const handleSingleSwitchChange = (switchOn, ruleId) => {
-    console.log('handleSingleSwitchChange', switchOn, ruleId);
-    setRules(prevRules => {
-      const newRules = prevRules.map(rule =>
+    console.log("handleSingleSwitchChange", switchOn, ruleId);
+    setRules((prevRules) => {
+      const newRules = prevRules.map((rule) =>
         rule.id === ruleId ? { ...rule, switchOn } : rule
       );
-      set('ajaxInterceptor_rules', newRules);
+      set("ajaxInterceptor_rules", newRules);
       return newRules;
     });
   };
 
   const handleLimitMethodChange = (val, ruleId) => {
-    setRules(prevRules => {
-      const newRules = prevRules.map(rule =>
+    setRules((prevRules) => {
+      const newRules = prevRules.map((rule) =>
         rule.id === ruleId ? { ...rule, limitMethod: val } : rule
       );
-      set('ajaxInterceptor_rules', newRules);
+      set("ajaxInterceptor_rules", newRules);
       return newRules;
     });
   };
 
   const handleExportRules = () => {
-    const rulesForExport = rules.map(rule => ({
+    const rulesForExport = rules.map((rule) => ({
       ...rule,
-      overrideTxt: typeof rule.overrideTxt === 'string' ?
-        (() => {
-          try {
-            return JSON.parse(rule.overrideTxt);
-          } catch (e) {
-            return rule.overrideTxt;
-          }
-        })()
-        : rule.overrideTxt,
+      overrideTxt:
+        typeof rule.overrideTxt === "string"
+          ? (() => {
+              try {
+                return JSON.parse(rule.overrideTxt);
+              } catch (e) {
+                return rule.overrideTxt;
+              }
+            })()
+          : rule.overrideTxt,
     }));
     const dataStr = JSON.stringify(rulesForExport, null, 2);
-    const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`;
-    const exportFileDefaultName = 'ajax_interceptor_rules.json';
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
+    const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(
+      dataStr
+    )}`;
+    const exportFileDefaultName = "ajax_interceptor_rules.json";
+    const linkElement = document.createElement("a");
+    linkElement.setAttribute("href", dataUri);
+    linkElement.setAttribute("download", exportFileDefaultName);
     linkElement.click();
   };
 
   useEffect(() => {
-    console.log('searchName', searchName);
-    console.log('searchUrl', searchUrl);
+    console.log("searchName", searchName);
+    console.log("searchUrl", searchUrl);
     if (searchName || searchUrl) {
-      setRules(prevRules => {
-        const newRules = prevRules.filter(rule => {
-          return rule.label.includes(searchName) && rule.match.includes(searchUrl);
+      setRules((prevRules) => {
+        const newRules = prevRules.filter((rule) => {
+          return (
+            rule.label.includes(searchName) && rule.match.includes(searchUrl)
+          );
         });
-        console.log('newRules', newRules);
+        console.log("newRules", newRules);
         return newRules;
       });
     } else {
-      readRulesFromStorage().then(rules => {
+      readRulesFromStorage().then((rules) => {
         setRules(rules as any);
       });
     }
   }, [searchName, searchUrl]);
 
   const handleFilterTypeChange = (val, ruleId) => {
-    setRules(prevRules => {
-      const newRules = prevRules.map(rule =>
+    setRules((prevRules) => {
+      const newRules = prevRules.map((rule) =>
         rule.id === ruleId ? { ...rule, filterType: val } : rule
       );
-      set('ajaxInterceptor_rules', newRules);
+      set("ajaxInterceptor_rules", newRules);
       return newRules;
     });
   };
 
   const handleMatchChange = (e, ruleId) => {
-    const value = e.target.value.replace(/\n$/, '');
-    setRules(prevRules => {
-      const newRules = prevRules.map(rule =>
+    const value = e.target.value.replace(/\n$/, "");
+    setRules((prevRules) => {
+      const newRules = prevRules.map((rule) =>
         rule.id === ruleId ? { ...rule, match: value } : { ...rule }
       );
       console.log(`[handleMatchChange] newRules:`, newRules);
@@ -354,8 +414,8 @@ const App = () => {
   };
 
   const handleLabelChange = (e, ruleId) => {
-    setRules(prevRules => {
-      const newRules = prevRules.map(rule =>
+    setRules((prevRules) => {
+      const newRules = prevRules.map((rule) =>
         rule.id === ruleId ? { ...rule, label: e.target.value } : rule
       );
       // set('ajaxInterceptor_rules', newRules);
@@ -367,11 +427,11 @@ const App = () => {
     setIsCreating(true);
     const newRule: AjaxInterceptorRule = {
       id: generateUniqueId(),
-      match: '',
+      match: "",
       label: `url${rules.length + 1}`,
       switchOn: true,
       key: buildUUID(),
-      tabId: 'Default',
+      tabId: "Default",
     };
     setCurrentEditRule(newRule);
     setShowDetail(true);
@@ -380,31 +440,34 @@ const App = () => {
   const handleClickAdd = (tabId) => {
     const newRule: AjaxInterceptorRule = {
       id: generateUniqueId(),
-      match: '',
+      match: "",
       label: `url${rules.length + 1}`,
       switchOn: true,
       key: buildUUID(),
       tabId: tabId,
     };
     setActiveKey(tabId);
-    setRules(prevRules => {
+    setRules((prevRules) => {
       const newRules = [...prevRules, newRule];
       // set('ajaxInterceptor_rules', newRules);
       return newRules;
     });
   };
 
-  const handleBatchRemove = (ruleIds: string[], needGroupRulesByTab = false) => {
-    setRules(prevRules => {
-      const newRules = prevRules.filter(rule => !ruleIds.includes(rule.id));
-      set('ajaxInterceptor_rules', newRules);
+  const handleBatchRemove = (
+    ruleIds: string[],
+    needGroupRulesByTab = false
+  ) => {
+    setRules((prevRules) => {
+      const newRules = prevRules.filter((rule) => !ruleIds.includes(rule.id));
+      set("ajaxInterceptor_rules", newRules);
       return newRules;
     });
 
-    setInterceptedRequests(prev => {
+    setInterceptedRequests((prev) => {
       const newRequests = { ...prev };
-      ruleIds.forEach(id => {
-        const rule = rules.find(r => r.id === id);
+      ruleIds.forEach((id) => {
+        const rule = rules.find((r) => r.id === id);
         if (rule) {
           delete newRequests[rule.match];
           delete newRequests[rule.label];
@@ -416,10 +479,12 @@ const App = () => {
     if (needGroupRulesByTab) {
       groupRulesByTab();
     } else {
-      setDataList(prevDataList => {
+      setDataList((prevDataList) => {
         const newDataList = { ...prevDataList };
-        Object.keys(newDataList).forEach(tabId => {
-          newDataList[tabId] = newDataList[tabId].filter(rule => !ruleIds.includes(rule.id));
+        Object.keys(newDataList).forEach((tabId) => {
+          newDataList[tabId] = newDataList[tabId].filter(
+            (rule) => !ruleIds.includes(rule.id)
+          );
         });
         return newDataList;
       });
@@ -432,7 +497,7 @@ const App = () => {
 
     handleBatchRemove([ruleId]);
 
-    setDataList(prevDataList => {
+    setDataList((prevDataList) => {
       const newDataList = { ...prevDataList };
       if (currentTabId && newDataList[currentTabId]?.length === 0) {
         delete newDataList[currentTabId];
@@ -443,14 +508,13 @@ const App = () => {
     });
   };
 
-  const handleCollaseChange = () => {
-  };
+  const handleCollaseChange = () => {};
 
   const handleSwitchChange = () => {
-    console.log('handleSwitchChange')
-    setSwitchOn(prev => {
+    console.log("handleSwitchChange");
+    setSwitchOn((prev) => {
       const newSwitchOn = !prev;
-      set('ajaxInterceptor_switchOn', newSwitchOn);
+      set("ajaxInterceptor_switchOn", newSwitchOn);
       return newSwitchOn;
     });
   };
@@ -464,29 +528,36 @@ const App = () => {
   };
 
   const generateRandomString = (length: number): string => {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
+    const characters =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let result = "";
     for (let i = 0; i < length; i++) {
-      result += characters.charAt(Math.floor(Math.random() * characters.length));
+      result += characters.charAt(
+        Math.floor(Math.random() * characters.length)
+      );
     }
     return result;
   };
 
   const handleTabEdit = (
     targetKey: React.MouseEvent | React.KeyboardEvent | string,
-    action: 'add' | 'remove',
+    action: "add" | "remove"
   ) => {
-    if (action === 'add') {
+    if (action === "add") {
       const newTabId = generateRandomString(5);
       handleClickAdd(newTabId);
     } else {
       const tabId = targetKey as string;
-      let deletingRuleIds = dataList[tabId].map(rule => rule.id);
+      let deletingRuleIds = dataList[tabId].map((rule) => rule.id);
       handleBatchRemove(deletingRuleIds, true);
 
-      const remainingTabs = Object.keys(dataList).filter(id => id !== tabId);
+      const remainingTabs = Object.keys(dataList).filter((id) => id !== tabId);
       // Set the activeKey to the last remaining tab, or undefined if no tabs left
-      setActiveKey(remainingTabs.length > 0 ? remainingTabs[remainingTabs.length - 1] : undefined);
+      setActiveKey(
+        remainingTabs.length > 0
+          ? remainingTabs[remainingTabs.length - 1]
+          : undefined
+      );
     }
   };
 
@@ -494,7 +565,7 @@ const App = () => {
     return rules.map((rule) => (
       <Panel key={rule.key} header={renderPanelHeader(rule)}>
         <Replacer
-          updateAddBtnTop_interval={() => { }}
+          updateAddBtnTop_interval={() => {}}
           ruleId={rule.id}
           set={set}
           rule={rule}
@@ -505,35 +576,45 @@ const App = () => {
     ));
   };
 
-  const renderPanelHeader = ({ id, filterType = 'normal', limitMethod = 'ALL', match, label, switchOn = true, key }) => (
-    <div className="panel-header" onClick={e => e.stopPropagation()}>
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        flex: 1,
-      }}>
-        <Space.Compact >
+  const renderPanelHeader = ({
+    id,
+    filterType = "normal",
+    limitMethod = "ALL",
+    match,
+    label,
+    switchOn = true,
+    key,
+  }) => (
+    <div className="panel-header" onClick={(e) => e.stopPropagation()}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+        }}
+      >
+        <Space.Compact>
           <Input
             size="small"
             placeholder="name"
             style={{
-              maxWidth: '200px',
-              flex: 'auto',
-              display: 'inline-block',
+              maxWidth: "200px",
+              flex: "auto",
+              display: "inline-block",
             }}
             defaultValue={label}
-            onChange={e => handleLabelChange(e, id)}
+            onChange={(e) => handleLabelChange(e, id)}
           />
           <Select
             size="small"
             defaultValue={limitMethod}
             style={{
-              width: '1px',
-              maxWidth: '120px',
-              flex: '1.5 1 auto',
-              display: 'inline-block',
+              width: "1px",
+              maxWidth: "120px",
+              flex: "1.5 1 auto",
+              display: "inline-block",
             }}
-            onChange={val => handleLimitMethodChange(val, id)}
+            onChange={(val) => handleLimitMethodChange(val, id)}
           >
             <Option value="ALL">ALL</Option>
             <Option value="GET">GET</Option>
@@ -547,12 +628,12 @@ const App = () => {
             size="small"
             defaultValue={filterType}
             style={{
-              width: '1px',
-              maxWidth: '120px',
-              flex: '1.5 1 auto',
-              display: 'inline-block',
+              width: "1px",
+              maxWidth: "120px",
+              flex: "1.5 1 auto",
+              display: "inline-block",
             }}
-            onChange={val => handleFilterTypeChange(val, id)}
+            onChange={(val) => handleFilterTypeChange(val, id)}
           >
             <Option value="normal">normal</Option>
             <Option value="regex">regex</Option>
@@ -562,15 +643,15 @@ const App = () => {
         <Input.TextArea
           rows={2}
           size="small"
-          placeholder={filterType === 'normal' ? 'eg: abc/get' : 'eg: abc.*'}
+          placeholder={filterType === "normal" ? "eg: abc/get" : "eg: abc.*"}
           style={{
-            flex: '1',
-            width: '100%',
-            display: 'inline-block',
+            flex: "1",
+            width: "100%",
+            display: "inline-block",
             marginTop: 10,
           }}
           defaultValue={match}
-          onChange={e => handleMatchChange(e, id)}
+          onChange={(e) => handleMatchChange(e, id)}
         />
       </div>
 
@@ -578,11 +659,11 @@ const App = () => {
         <Switch
           size="small"
           defaultChecked={switchOn}
-          onChange={val => handleSingleSwitchChange(val, id)}
+          onChange={(val) => handleSingleSwitchChange(val, id)}
           style={{
-            width: '28px',
-            flex: 'none',
-            marginRight: '8px',
+            width: "28px",
+            flex: "none",
+            marginRight: "8px",
           }}
         />
         <Button
@@ -591,8 +672,8 @@ const App = () => {
           shape="circle"
           icon={<DeleteOutlined />}
           size="small"
-          onClick={e => handleClickRemove(e, id)}
-          style={{ width: '24px', flex: 'none' }}
+          onClick={(e) => handleClickRemove(e, id)}
+          style={{ width: "24px", flex: "none" }}
         />
       </div>
     </div>
@@ -612,11 +693,11 @@ const App = () => {
               <Badge
                 count={num}
                 style={{
-                  backgroundColor: '#fff',
-                  color: '#999',
-                  boxShadow: '0 0 0 1px #d9d9d9 inset',
-                  marginTop: '-3px',
-                  marginRight: '4px',
+                  backgroundColor: "#fff",
+                  color: "#999",
+                  boxShadow: "0 0 0 1px #d9d9d9 inset",
+                  marginTop: "-3px",
+                  marginRight: "4px",
                 }}
               />
               <span className="url">{url}</span>
@@ -637,42 +718,44 @@ const App = () => {
   };
 
   const checkDuplicateMatch = (e) => {
-    console.log(e)
+    console.log(e);
 
     const currentMatch = e.target.value;
-    readRulesFromStorage().then(rules => {
-      console.log(rules, currentMatch)
+    readRulesFromStorage().then((rules) => {
+      console.log(rules, currentMatch);
       // return duplicate match
-      const duplicateMatch = (rules as any).filter(rule => rule.match === currentMatch);
-      console.log(duplicateMatch)
+      const duplicateMatch = (rules as any).filter(
+        (rule) => rule.match === currentMatch
+      );
+      console.log(duplicateMatch);
       // return duplicateMatch;
       setDuplicateMatch(duplicateMatch);
-    })
+    });
   };
 
   const tableColumns = [
     {
       title: "id",
       dataIndex: "id",
-      width: '160px',
+      width: "160px",
       ellipsis: true,
       key: "id",
       render: (text, record) => (
         <Tooltip title={text}>
           <span>{text}</span>
         </Tooltip>
-      )
+      ),
     },
     {
       title: "Name",
-      width: '150px',
+      width: "150px",
       dataIndex: "label",
       key: "label",
       ellipsis: true,
     },
     {
       title: "Enable",
-      width: '120px',
+      width: "120px",
       dataIndex: "switchOn",
       key: "switchOn",
       render: (text, record) => (
@@ -680,7 +763,7 @@ const App = () => {
           checked={record.switchOn}
           onChange={(val) => handleSingleSwitchChange(val, record.id)}
         />
-      )
+      ),
     },
     {
       title: "match",
@@ -690,41 +773,64 @@ const App = () => {
       render: (text, record) => (
         <Tooltip placement="topLeft" title={text}>
           <Space.Compact>
-            <Button type="text" icon={<CopyOutlined />} size="small" onClick={() => {
-              // copy match
-              navigator.clipboard.writeText(record.match || '');
-              message.success('Copied to clipboard');
+            <Button
+              type="text"
+              icon={<CopyOutlined />}
+              size="small"
+              onClick={() => {
+                // copy match
+                navigator.clipboard.writeText(record.match || "");
+                message.success("Copied to clipboard");
+              }}
+            />
 
-            }} />
-
-            <Button type="link" size="small" onClick={() => handleViewDetail(text, record)}>{text}</Button>
-
+            <Button
+              type="link"
+              size="small"
+              onClick={() => handleViewDetail(text, record)}
+            >
+              {text}
+            </Button>
           </Space.Compact>
         </Tooltip>
-      )
+      ),
     },
     {
       title: "Action",
-      width: '100px',
+      width: "100px",
       render: (text, record) => (
         <Space>
-          <Button type="link" onClick={() => handleViewDetail(text, record)} icon={<EditOutlined />} />
-          <Button type="text" danger onClick={() => handleClickRemove(text, record.id)} icon={<DeleteOutlined />} />
+          <Button
+            type="link"
+            onClick={() => handleViewDetail(text, record)}
+            icon={<EditOutlined />}
+          />
+          <Button
+            type="text"
+            danger
+            onClick={() => handleClickRemove(text, record.id)}
+            icon={<DeleteOutlined />}
+          />
         </Space>
-      )
-    }
-  ]
+      ),
+    },
+  ];
 
   const handleRulesChange = (data) => {
     console.log(1);
     if (currentEditRule) {
-      setCurrentEditRule({ ...currentEditRule, overrideTxt: JSON.stringify(data) });
+      setCurrentEditRule({
+        ...currentEditRule,
+        overrideTxt: JSON.stringify(data),
+      });
     }
   };
   const handleUpdateRules = () => {
     if (currentEditRule) {
-      readRulesFromStorage().then(rules => {
-        const index = (rules as any).findIndex(rule => rule.id === currentEditRule.id);
+      readRulesFromStorage().then((rules) => {
+        const index = (rules as any).findIndex(
+          (rule) => rule.id === currentEditRule.id
+        );
         let newRules = [...(rules as any)];
         if (index !== -1) {
           newRules[index] = currentEditRule;
@@ -733,60 +839,124 @@ const App = () => {
           newRules.push(currentEditRule);
         }
         setRules(newRules);
-        set('ajaxInterceptor_rules', newRules);
+        set("ajaxInterceptor_rules", newRules);
         setShowDetail(false);
+      });
+    }
+  };
+
+  const handleGenerateMockData = () => {
+    try {
+      const matches = columnsInput.match(/dataIndex\s*:\s*['"`](\w+)['"`]/g)
+      if (!matches) throw new Error('无法提取字段，请确认格式中含有 dataIndex')
+
+      const fields = matches.map((line) => line.match(/['"`](\w+)['"`]/)?.[1] || '')
+
+      const mockContent = Array.from({ length: 10 }, (_, i) => {
+        const obj: Record<string, any> = {
+          uuid: `uuid-${crypto.randomUUID()}`,
+        }
+        fields.forEach((field) => {
+          obj[field] = mockValue(field, i + 1)
+        })
+        return obj
       })
+
+      // Wrap the generated data in the new structure
+      const mockData = {
+        code: 200,
+        data: {
+          content: mockContent,
+          pageNumber: "1",
+          pageSize: "10",
+          totalPages: "27",
+          totalRecords: "266"
+        },
+        messageCn: "",
+        messageEn: "",
+        success: true
+      }
+
+      console.log(mockData)
+
+      // Set the structured mock data to the JSON editor
+      if (currentEditRule) {
+        setCurrentEditRule({
+          ...currentEditRule,
+          overrideTxt: JSON.stringify(mockData, null, 2),
+        });
+      }
+      message.success('✅ Mock data generated and pasted to JSON editor!')
+    } catch (err: any) {
+      message.error('❌ 解析失败: ' + err.message)
     }
   };
 
   return (
-
     <Spin spinning={isLoading}>
       <AnimatePresence>
         {!switchOn && (
           <motion.div
             key="lock-screen"
             style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
               gap: 5,
             }}
-          // initial={{ opacity: 0, scale: 0.2 }}
-          // animate={{ opacity: 1, scale: 1 }}
-          // exit={{ opacity: 0, scale: 1.2 }}
-          // transition={{ duration: 0.5, type: "spring", stiffness: 100 }}
+            // initial={{ opacity: 0, scale: 0.2 }}
+            // animate={{ opacity: 1, scale: 1 }}
+            // exit={{ opacity: 0, scale: 1.2 }}
+            // transition={{ duration: 0.5, type: "spring", stiffness: 100 }}
           >
             <motion.div
-              key='lock'
+              key="lock"
               initial={{ opacity: 0, scale: 0.2 }}
-              animate={{ opacity: 1, scale: 1.5, transition: { duration: 0.5, type: "spring", delay: 0.5 } }}
-              exit={{ opacity: 0, scale: 1.8, transition: { duration: 0.5, type: "spring", delay: 0.1 } }}
-            // transition={{ duration: 0.5, type: "spring",delay: 0.5 }}
+              animate={{
+                opacity: 1,
+                scale: 1.5,
+                transition: { duration: 0.5, type: "spring", delay: 0.5 },
+              }}
+              exit={{
+                opacity: 0,
+                scale: 1.8,
+                transition: { duration: 0.5, type: "spring", delay: 0.1 },
+              }}
+              // transition={{ duration: 0.5, type: "spring",delay: 0.5 }}
             >
               <div
-                className='lock-btn'
+                className="lock-btn"
                 onClick={() => {
                   // setSwitchOn(true);
-                  handleSwitchChange()
+                  handleSwitchChange();
                 }}
               >
                 <IconComponent icon={BiSolidLock} />
               </div>
             </motion.div>
             <motion.div
-              key='lock-text'
+              key="lock-text"
               initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0, transition: { duration: 0.3, type: "spring", delay: 0.8 } }}
-              exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring", delay: 0 } }}
-            // transition={{ duration: 0.3, type: "spring",delay: 0.8 }}
+              animate={{
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.3, type: "spring", delay: 0.8 },
+              }}
+              exit={{
+                opacity: 0,
+                y: 10,
+                transition: { duration: 0.3, type: "spring", delay: 0 },
+              }}
+              // transition={{ duration: 0.3, type: "spring",delay: 0.8 }}
             >
-              <p style={{ fontSize: 16, fontStyle: 'italic', color: '#999' }}>Click to enable monitor</p>
+              <p style={{ fontSize: 16, fontStyle: "italic", color: "#999" }}>
+                Click to enable monitor
+              </p>
             </motion.div>
           </motion.div>
         )}
@@ -795,41 +965,53 @@ const App = () => {
           <motion.div
             key="main-content"
             style={{
-              width: '100%',
-              height: '100%',
-              padding: '20px',
-              boxSizing: 'border-box',
-              position: 'relative',
+              width: "100%",
+              height: "100%",
+              padding: "20px",
+              boxSizing: "border-box",
+              position: "relative",
             }}
-          // initial={{ opacity: 0, y: 20 }}
-          // animate={{ opacity: 1, y: 0, transition: { duration: 0.5, type: "spring" } }}
-          // exit={{ opacity: 0, y: -20, transition: { duration: 0.3, type: "spring",delay: 0 } }}
-          // transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
+            // initial={{ opacity: 0, y: 20 }}
+            // animate={{ opacity: 1, y: 0, transition: { duration: 0.5, type: "spring" } }}
+            // exit={{ opacity: 0, y: -20, transition: { duration: 0.3, type: "spring",delay: 0 } }}
+            // transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
           >
             <motion.div
-              key='header-box'
+              key="header-box"
               style={{
-                padding: '12px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                boxSizing: 'border-box',
-                marginBottom: '20px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+                padding: "12px",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                boxSizing: "border-box",
+                marginBottom: "20px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
               }}
               initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0, transition: { duration: 0.5, type: "spring", delay: 0.5 } }}
-              exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring", delay: 0.3 } }}
-            // transition={{ duration: 0.3, type: "spring",delay: 1.5 }}
+              animate={{
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.5, type: "spring", delay: 0.5 },
+              }}
+              exit={{
+                opacity: 0,
+                y: 10,
+                transition: { duration: 0.3, type: "spring", delay: 0.3 },
+              }}
+              // transition={{ duration: 0.3, type: "spring",delay: 1.5 }}
             >
-              <div className='lock-btn small' onClick={handleSwitchChange}>
-                <IconComponent icon={switchOn ? BiSolidLockOpen : BiSolidLock} />
+              <div className="lock-btn small" onClick={handleSwitchChange}>
+                <IconComponent
+                  icon={switchOn ? BiSolidLockOpen : BiSolidLock}
+                />
               </div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-              }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
                 <Input.Search
                   style={{
                     width: 200,
@@ -847,38 +1029,64 @@ const App = () => {
                 <Upload {...uploadProps}>
                   <Button
                     style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '4px',
+                      width: "32px",
+                      height: "32px",
+                      borderRadius: "4px",
                     }}
-                    color="primary" variant="filled"
-                    icon={<IconComponent icon={FaFileImport} style={{ marginBottom: -1 }} />}
+                    color="primary"
+                    variant="filled"
+                    icon={
+                      <IconComponent
+                        icon={FaFileImport}
+                        style={{ marginBottom: -1 }}
+                      />
+                    }
                   />
                 </Upload>
-                <Button style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 4,
-                }} color="primary" variant="filled" onClick={() => handleExportRules()} icon={<IconComponent icon={FaFileExport} style={{ marginBottom: -1 }} />} />
+                <Button
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 4,
+                  }}
+                  color="primary"
+                  variant="filled"
+                  onClick={() => handleExportRules()}
+                  icon={
+                    <IconComponent
+                      icon={FaFileExport}
+                      style={{ marginBottom: -1 }}
+                    />
+                  }
+                />
 
                 <Button type="primary" onClick={handleAddNewRule}>
                   <PlusOutlined />
                   Add Rule
                 </Button>
+
               </div>
             </motion.div>
             <motion.div
-              key='table-box'
+              key="table-box"
               ref={tableBoxRef}
               style={{
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                height: 'calc(100% - 84px)',
-                position: 'relative',
+                boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                height: "calc(100% - 84px)",
+                position: "relative",
               }}
               initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0, transition: { duration: 0.3, type: "spring", delay: 0.8 } }}
-              exit={{ opacity: 0, y: 10, transition: { duration: 0.3, type: "spring", delay: 0 } }}
-            // transition={{ duration: 0.3, type: "spring",delay: 0.8 }}
+              animate={{
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.3, type: "spring", delay: 0.8 },
+              }}
+              exit={{
+                opacity: 0,
+                y: 10,
+                transition: { duration: 0.3, type: "spring", delay: 0 },
+              }}
+              // transition={{ duration: 0.3, type: "spring",delay: 0.8 }}
             >
               <Table
                 bordered
@@ -886,14 +1094,14 @@ const App = () => {
                   pageSize: 20,
                   total: rules.length,
                   showTotal: (total, range) => `Total: ${total}`,
-                  showSizeChanger: true
+                  showSizeChanger: true,
                 }}
                 style={{
-                  height: '100%',
+                  height: "100%",
                   opacity: switchOn ? 1 : 0.65,
                 }}
                 scroll={{ y: tableBoxHeight - 78 }}
-                size='small'
+                size="small"
                 columns={tableColumns}
                 dataSource={rules}
               />
@@ -901,7 +1109,11 @@ const App = () => {
             <Drawer
               maskClosable={false}
               width={1200}
-              title={isCreating ? 'Create new rule' : 'Detail for ' + currentEditRule?.label}
+              title={
+                isCreating
+                  ? "Create new rule"
+                  : "Detail for " + currentEditRule?.label
+              }
               open={showDetail}
               onClose={() => {
                 setShowDetail(false);
@@ -917,125 +1129,205 @@ const App = () => {
                 </Space>
               }
             >
-              <div style={{
-                display: 'flex',
-                gap: '10px',
-                height: '100%',
-                overflowY: 'scroll',
-              }}>
-                <div style={{
-                  width: 500
-                }}>
-                  <Typography.Title level={4} style={{
-                    marginTop: 0
-                  }}>Id:</Typography.Title>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  height: "100%",
+                  overflowY: "scroll",
+                }}
+              >
+                <div
+                  style={{
+                    width: 500,
+                  }}
+                >
+                  <Typography.Title
+                    level={4}
+                    style={{
+                      marginTop: 0,
+                    }}
+                  >
+                    Id:
+                  </Typography.Title>
 
-                  <Space.Compact style={{
-                    width: '100%',
-                  }}>
+                  <Space.Compact
+                    style={{
+                      width: "100%",
+                    }}
+                  >
                     <Input
                       style={{
-                        marginBottom: '10px',
+                        marginBottom: "10px",
                       }}
                       disabled
-                      value={currentEditRule?.id || ''}
+                      value={currentEditRule?.id || ""}
                     />
-                    <Button type="primary" icon={<CopyOutlined />} onClick={() => {
-                      navigator.clipboard.writeText(currentEditRule?.id || '');
-                      message.success('Copied to clipboard');
-                    }}></Button>
+                    <Button
+                      type="primary"
+                      icon={<CopyOutlined />}
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          currentEditRule?.id || ""
+                        );
+                        message.success("Copied to clipboard");
+                      }}
+                    ></Button>
                   </Space.Compact>
                   <Typography.Title level={4}>Label:</Typography.Title>
-                  <Space.Compact style={{
-                    width: '100%',
-                  }}>
-
+                  <Space.Compact
+                    style={{
+                      width: "100%",
+                    }}
+                  >
                     <Input
                       style={{
-                        marginBottom: '10px',
+                        marginBottom: "10px",
                       }}
-                      value={currentEditRule?.label || ''}
+                      value={currentEditRule?.label || ""}
                       onChange={(e) => {
                         if (currentEditRule) {
-                          setCurrentEditRule({ ...currentEditRule, label: e.target.value });
+                          setCurrentEditRule({
+                            ...currentEditRule,
+                            label: e.target.value,
+                          });
                         }
                       }}
                     />
-                    <Button type="primary" icon={<IconComponent icon={MdOutlineRefresh} />} onClick={() => {
+                    <Button
+                      type="primary"
+                      icon={<IconComponent icon={MdOutlineRefresh} />}
+                      onClick={() => {
                         if (currentEditRule) {
-                          setCurrentEditRule({ ...currentEditRule, label: currentEditRule.match.split('/')[currentEditRule.match.split('/').length - 1] });
+                          setCurrentEditRule({
+                            ...currentEditRule,
+                            label:
+                              currentEditRule.match.split("/")[
+                                currentEditRule.match.split("/").length - 1
+                              ],
+                          });
                         }
-                      message.success('Refresh from match');
-                    }}></Button>
+                        message.success("Refresh from match");
+                      }}
+                    ></Button>
                   </Space.Compact>
                   <Typography.Title level={4}>Match:</Typography.Title>
-                  <Space.Compact style={{
-                    width: '100%',
-                  }}>
-                  <Input.TextArea
-                    rows={10}
+                  <Space.Compact
                     style={{
-                      marginBottom: '10px',
+                      width: "100%",
                     }}
-                    onBlur={checkDuplicateMatch}
-                    value={currentEditRule?.match || ''}
-                    onChange={(e) => {
-                      if (currentEditRule) {
-                        let newItem = { ...currentEditRule, match: e.target.value };
-                        if(!currentEditRule.label){
-                          newItem.label = e.target.value.split('/')[e.target.value.split('/').length - 1]
-                        }
-                        console.log(newItem);
-                        setCurrentEditRule(newItem);
-                      }
-                    }}
-                  />
-                  <Button type="primary" icon={<IconComponent icon={MdContentPaste} />} onClick={() => {
-                      navigator.clipboard.readText().then(text => {
+                  >
+                    <Input.TextArea
+                      rows={10}
+                      style={{
+                        marginBottom: "10px",
+                      }}
+                      onBlur={checkDuplicateMatch}
+                      value={currentEditRule?.match || ""}
+                      onChange={(e) => {
                         if (currentEditRule) {
-                          setCurrentEditRule({ ...currentEditRule, match: text });
+                          let newItem = {
+                            ...currentEditRule,
+                            match: e.target.value,
+                          };
+                          if (!currentEditRule.label) {
+                            newItem.label =
+                              e.target.value.split("/")[
+                                e.target.value.split("/").length - 1
+                              ];
+                          }
+                          console.log(newItem);
+                          setCurrentEditRule(newItem);
                         }
-                      });
-                      message.success('Paste from clipboard');
-                    }}></Button>
+                      }}
+                    />
+                    <Button
+                      type="primary"
+                      icon={<IconComponent icon={MdContentPaste} />}
+                      onClick={() => {
+                        navigator.clipboard.readText().then((text) => {
+                          if (currentEditRule) {
+                            setCurrentEditRule({
+                              ...currentEditRule,
+                              match: text,
+                            });
+                          }
+                        });
+                        message.success("Paste from clipboard");
+                      }}
+                    ></Button>
                   </Space.Compact>
                   {duplicateMatch.length > 0 && isCreating && (
                     <Collapse
                       size="small"
-                      defaultActiveKey={['1']}
-                      items={[{
-                        key: '1', label: 'Duplicate match: ' + duplicateMatch.length, children: <>
-                          {duplicateMatch.map(rule => (
-                            <Typography.Text
-                              className='duplicate-match'
-                              key={rule.id} onClick={() => {
-                                setIsCreating(false);
-                                setCurrentEditRule(rule);
-                                setShowDetail(true);
-                              }}>{rule.match}</Typography.Text>
-                          ))}
-                        </>
-                      }]}
+                      defaultActiveKey={["1"]}
+                      items={[
+                        {
+                          key: "1",
+                          label: "Duplicate match: " + duplicateMatch.length,
+                          children: (
+                            <>
+                              {duplicateMatch.map((rule) => (
+                                <Typography.Text
+                                  className="duplicate-match"
+                                  key={rule.id}
+                                  onClick={() => {
+                                    setIsCreating(false);
+                                    setCurrentEditRule(rule);
+                                    setShowDetail(true);
+                                  }}
+                                >
+                                  {rule.match}
+                                </Typography.Text>
+                              ))}
+                            </>
+                          ),
+                        },
+                      ]}
                     />
+                  )}
+                  
+                  {isCreating && (
+                    <>
+                      <Typography.Title level={4}>Generate Mock Data:</Typography.Title>
+                      <Input.TextArea
+                        rows={6}
+                        placeholder="粘贴 columns 数组（包含 dataIndex）"
+                        value={columnsInput}
+                        onChange={(e) => setColumnsInput(e.target.value)}
+                        style={{
+                          marginBottom: "10px",
+                        }}
+                      />
+                      <Button
+                        type="primary"
+                        icon={<ToolFilled />}
+                        onClick={handleGenerateMockData}
+                        disabled={!columnsInput.trim()}
+                        style={{
+                          marginBottom: "10px",
+                        }}
+                      >
+                        Generate Mock Data
+                      </Button>
+                    </>
                   )}
                 </div>
 
                 <JsonEditor
-                  rootName=''
-                  className='json-editor'
-                  data={JSON.parse(currentEditRule?.overrideTxt || '{}')}
+                  rootName=""
+                  className="json-editor"
+                  data={JSON.parse(currentEditRule?.overrideTxt || "{}")}
                   setData={handleRulesChange}
                 />
               </div>
-
             </Drawer>
+
           </motion.div>
         )}
       </AnimatePresence>
     </Spin>
-
-  )
-
+  );
 };
 
 const root = createRoot(document.getElementById("root")!);
