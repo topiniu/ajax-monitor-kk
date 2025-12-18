@@ -42,6 +42,16 @@ function handleContentSend(tabId, params = null) {
   }
 }
 
+// Broadcast a message to all tabs (all windows) to keep page scripts in sync
+function broadcastToAllTabs(params = null) {
+  chrome.tabs.query({}, (tabs) => {
+    tabs.forEach((tab) => {
+      if (!tab.id) return
+      handleContentSend(tab.id, params)
+    })
+  })
+}
+
 // 接收iframe传来的信息，转发给content.js
 chrome.runtime.onMessage.addListener(msg => {
   if (msg.type === 'ajaxInterceptor' && msg.to === 'background') {
@@ -80,6 +90,12 @@ chrome.runtime.onMessage.addListener(msg => {
     if (msg.key === 'customFunction') {
       setPopup(msg.value.panelPosition)
     }
+    // Broadcast key changes so every tab gets the latest switch/rules immediately
+    if (msg.key === "ajaxInterceptor_rules" || msg.key === 'ajaxInterceptor_switchOn') {
+      broadcastToAllTabs({ ...msg, to: 'content' })
+      return
+    }
+
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       if (tabs && tabs.length) {
         handleContentSend(tabs[0].id, { ...msg, to: 'content' })
@@ -106,12 +122,9 @@ chrome.storage.local.get(['ajaxInterceptor_switchOn', 'ajaxInterceptor_rules', '
 
 function setPopup(curPanelPosition = false) {
   // panelPosition - 0:页面悬浮面板, 1:devTools
-  // 面板从devtools切换为悬浮，提示需要刷新
-  if (lastPanelPosition && !curPanelPosition) {
-    chrome.action.setPopup({ popup: 'popupSusFresh.html' })
-  } else {   // 其他情况，判断当前是devtools，则提示打开devtools
-    chrome.action.setPopup({ popup: curPanelPosition ? 'popupDev.html' : 'popup.html' })
-  }
+  // Always clear the popup so the extension icon opens mainpanel directly
+  chrome.action.setPopup({ popup: '' })
+
   // 面板从悬浮切换为devtools，悬浮面板消失
   if (!lastPanelPosition && curPanelPosition) {
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {

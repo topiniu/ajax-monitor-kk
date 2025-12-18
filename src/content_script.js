@@ -101,8 +101,7 @@ document.documentElement.appendChild(script)
 
 script.addEventListener('load', () => {
   console.log("[AJAx Modifier] script loaded");
-  controlFloatPanelButton();
-  // createFloatPanel();
+  // Don't create button unconditionally - let the page script decide based on rules
   chrome.storage.local.get(['ajaxInterceptor_switchOn', 'ajaxInterceptor_rules'], (result) => {
     if (result.hasOwnProperty('ajaxInterceptor_switchOn')) {
       postMessage({type: 'ajaxInterceptor', to: 'pageScript', key: 'ajaxInterceptor_switchOn', value: result.ajaxInterceptor_switchOn})
@@ -111,6 +110,29 @@ script.addEventListener('load', () => {
       postMessage({type: 'ajaxInterceptor', to: 'pageScript', key: 'ajaxInterceptor_rules', value: result.ajaxInterceptor_rules})
     }
   })
+
+  // Sync future storage updates to the page script so every tab stays in sync
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+
+    if (changes.ajaxInterceptor_switchOn) {
+      postMessage({
+        type: 'ajaxInterceptor',
+        to: 'pageScript',
+        key: 'ajaxInterceptor_switchOn',
+        value: changes.ajaxInterceptor_switchOn.newValue,
+      });
+    }
+
+    if (changes.ajaxInterceptor_rules) {
+      postMessage({
+        type: 'ajaxInterceptor',
+        to: 'pageScript',
+        key: 'ajaxInterceptor_rules',
+        value: changes.ajaxInterceptor_rules.newValue,
+      });
+    }
+  });
 })
 
 // Listen for messages from the popup

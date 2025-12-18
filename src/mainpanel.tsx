@@ -74,19 +74,791 @@ const generateUniqueId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 };
 
-// Generate fake values based on dataIndex field names
+// Enhanced column analysis and type detection
+interface ColumnInfo {
+  dataIndex: string;
+  title?: string;
+  render?: string;
+  detectedType: 'id' | 'string' | 'number' | 'array' | 'boolean' | 'date' | 'mapped' | 'location' | 'business';
+  mappedValues?: Record<string | number, string>;
+  isArrayField?: boolean;
+}
+
+// Analyze column definition to determine data type
+function analyzeColumn(columnText: string): ColumnInfo {
+  const dataIndexMatch = columnText.match(/dataIndex\s*:\s*['"`](\w+)['"`]/);
+  const titleMatch = columnText.match(/title\s*:\s*['"`]([^'"`]+)['"`]/);
+  const renderMatch = columnText.match(/render\s*:\s*\((.*?)\)\s*=>\s*([\s\S]*?)(?=,\s*}|\n\s*}|$)/);
+
+  const dataIndex = dataIndexMatch?.[1] || '';
+  const title = titleMatch?.[1] || '';
+  const renderCode = renderMatch?.[0] || '';
+
+  let detectedType: ColumnInfo['detectedType'] = 'string';
+  let mappedValues: Record<string | number, string> | undefined;
+  let isArrayField = false;
+
+  const lower = dataIndex.toLowerCase();
+  const titleLower = title.toLowerCase();
+
+  // Detect array fields from render function
+  if (renderCode.includes('?.join') || renderCode.includes('.map(') || renderCode.includes('businesses: string[]') || renderCode.includes('models: number[]')) {
+    isArrayField = true;
+    detectedType = 'array';
+  }
+
+  // Detect mapped values from render function
+  const mapMatch = renderCode.match(/const\s+(\w+Map)\s*=\s*\{([^}]+)\}/);
+  if (mapMatch) {
+    detectedType = 'mapped';
+    try {
+      const mapContent = mapMatch[2];
+      mappedValues = {};
+      const entries = mapContent.match(/(\d+)\s*:\s*['"`]([^'"`]+)['"`]/g) || [];
+      entries.forEach(entry => {
+        const [, key, value] = entry.match(/(\d+)\s*:\s*['"`]([^'"`]+)['"`]/) || [];
+        if (key && value) {
+          mappedValues![parseInt(key)] = value;
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to parse mapped values:', e);
+    }
+  }
+
+  // Type detection based on field names and context
+  if (!mappedValues && !isArrayField) {
+    if (lower === 'id' || lower.endsWith('id')) {
+      detectedType = 'id';
+    } else if (lower.includes('count') || lower.includes('number') || renderCode.includes('value > 0')) {
+      detectedType = 'number';
+    } else if (lower.includes('time') || lower.includes('date') || titleLower.includes('时间') || titleLower.includes('日期')) {
+      detectedType = 'date';
+    } else if (lower.startsWith('is') || lower.startsWith('has') || renderCode.includes('=== 1 ?')) {
+      detectedType = 'boolean';
+    } else if (lower.includes('location') || titleLower.includes('地') || renderCode.includes('countryName') || renderCode.includes('province')) {
+      detectedType = 'location';
+    } else if (lower.includes('business') || lower.includes('main') || titleLower.includes('主营') || titleLower.includes('业务')) {
+      detectedType = 'business';
+    } else if (lower.includes('code') || titleLower.includes('代码') || titleLower.includes('编码')) {
+      detectedType = 'string';
+    }
+  }
+
+  return {
+    dataIndex,
+    title,
+    render: renderCode,
+    detectedType,
+    mappedValues,
+    isArrayField
+  };
+}
+
+// Generate mock value based on analyzed column info
+function generateMockValue(columnInfo: ColumnInfo, index: number): any {
+  const { dataIndex, detectedType, mappedValues, isArrayField } = columnInfo;
+
+  switch (detectedType) {
+    case 'id':
+      if (dataIndex === 'id') {
+        return index + 1000; // Primary ID as number
+      }
+      return `${dataIndex.toUpperCase()}-${(index + 1).toString().padStart(4, '0')}`;
+
+    case 'number':
+      if (dataIndex.includes('count') || dataIndex.includes('Count')) {
+        return Math.floor(Math.random() * 100) + index;
+      }
+      return Math.floor(Math.random() * 1000) + index * 10;
+
+    case 'date':
+      const baseDate = new Date(2024, 0, 1);
+      baseDate.setDate(baseDate.getDate() + index * 30);
+      return baseDate.toISOString().split('T')[0];
+
+    case 'boolean':
+      if (dataIndex === 'isShow') {
+        return Math.random() > 0.3 ? 1 : 0; // More likely to be shown
+      }
+      if (dataIndex.includes('isMerge')) {
+        return [1, 2, 3][index % 3]; // Different merge states
+      }
+      return Math.random() > 0.5 ? 1 : 0;
+
+    case 'mapped':
+      if (mappedValues) {
+        const keys = Object.keys(mappedValues).map(k => parseInt(k));
+        return keys[index % keys.length];
+      }
+      return index % 3 + 1;
+
+    case 'array':
+      if (dataIndex.includes('main') || dataIndex.includes('Business')) {
+        const businesses = ['纺织服装', '电子产品', '机械制造', '化工材料', '食品饮料', '建材家居'];
+        const count = Math.min(3, Math.max(1, index % 4));
+        return Array.from({length: count}, (_, i) => businesses[(index + i) % businesses.length]);
+      }
+      if (dataIndex.includes('management') || dataIndex.includes('Model') || dataIndex.includes('foundry')) {
+        const maxItems = mappedValues ? Object.keys(mappedValues).length : 3;
+        const count = Math.min(2, Math.max(1, (index % 3) + 1));
+        return Array.from({length: count}, (_, i) => (i + 1) + (index % maxItems));
+      }
+      return [`item-${index}-1`, `item-${index}-2`];
+
+    case 'location':
+      const countries = ['中国', '美国', '德国', '日本'];
+      const provinces = ['广东省', '江苏省', '浙江省', '北京市', '上海市'];
+      const cities = ['深圳市', '苏州市', '杭州市', '朝阳区', '浦东新区'];
+
+      if (dataIndex === 'location') {
+        // This will be processed by render function to show "country / province / city"
+        return null; // The actual location data is in separate fields
+      }
+
+      if (dataIndex.includes('country')) {
+        return countries[index % countries.length];
+      }
+      if (dataIndex.includes('province')) {
+        return provinces[index % provinces.length];
+      }
+      if (dataIndex.includes('city')) {
+        return cities[index % cities.length];
+      }
+
+      return `${provinces[index % provinces.length]} ${cities[index % cities.length]}`;
+
+    case 'business':
+      const businessTypes = ['制造业', '服务业', '贸易业', '科技业', '金融业'];
+      return businessTypes[index % businessTypes.length];
+
+    case 'string':
+    default:
+      if (dataIndex.includes('name') || dataIndex.includes('Name')) {
+        const companyNames = ['华为科技有限公司', '腾讯控股有限公司', '阿里巴巴集团', '百度在线网络技术', '京东数科控股', '美团点评集团'];
+        if (dataIndex.includes('enterprise') || dataIndex.includes('Enterprise')) {
+          return companyNames[index % companyNames.length];
+        }
+        return `${companyNames[index % companyNames.length].split('')[0]}${dataIndex}-${index + 1}`;
+      }
+      if (dataIndex.includes('code') || dataIndex.includes('Code')) {
+        // Generate realistic social credit codes
+        if (dataIndex.includes('social') || dataIndex.includes('credit')) {
+          return `91${Math.random().toString().slice(2, 8)}${String(index).padStart(8, '0')}0${String(Math.floor(Math.random() * 10))}`;
+        }
+        return `CODE${Math.random().toString(36).slice(2, 8).toUpperCase()}${String(index).padStart(3, '0')}`;
+      }
+      return `${dataIndex}-值-${index + 1}`;
+  }
+}
+
+// TypeScript interface parsing
+interface TSField {
+  name: string;
+  type: string;
+  isOptional: boolean;
+  isArray: boolean;
+  comment?: string;
+  enumValues?: (number | string)[];
+  nestedInterface?: TSInterface;
+}
+
+interface TSInterface {
+  name: string;
+  fields: TSField[];
+  isRoot?: boolean;
+}
+
+// Content type detection
+type ContentType = 'columns' | 'typescript' | 'unknown';
+
+function detectContentType(content: string): ContentType {
+  const trimmed = content.trim();
+
+  // Check for TypeScript interface
+  if (trimmed.includes('interface ') &&
+      (trimmed.includes('export interface') || trimmed.includes('interface ')) &&
+      trimmed.includes('{') && trimmed.includes('}')) {
+    return 'typescript';
+  }
+
+  // Check for columns array
+  if ((trimmed.includes('dataIndex') && trimmed.includes('title')) ||
+      (trimmed.includes('[') && trimmed.includes('dataIndex'))) {
+    return 'columns';
+  }
+
+  return 'unknown';
+}
+
+function extractBalancedBlock(source: string, openBraceIndex: number): { content: string; endIndex: number } | null {
+  let depth = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inTemplateString = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = openBraceIndex; i < source.length; i++) {
+    const char = source[i];
+    const nextChar = source[i + 1];
+
+    if (inLineComment) {
+      if (char === '\n') {
+        inLineComment = false;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char === '*' && nextChar === '/') {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (inSingleQuote) {
+      if (char === '\\') {
+        i++;
+        continue;
+      }
+      if (char === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      if (char === '\\') {
+        i++;
+        continue;
+      }
+      if (char === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+
+    if (inTemplateString) {
+      if (char === '\\') {
+        i++;
+        continue;
+      }
+      if (char === '`') {
+        inTemplateString = false;
+      }
+      continue;
+    }
+
+    if (char === '/' && nextChar === '/') {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+
+    if (char === '/' && nextChar === '*') {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true;
+      continue;
+    }
+
+    if (char === '`') {
+      inTemplateString = true;
+      continue;
+    }
+
+    if (char === '{') {
+      depth++;
+    } else if (char === '}') {
+      depth--;
+      if (depth === 0) {
+        return {
+          content: source.slice(openBraceIndex + 1, i),
+          endIndex: i
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseTypeScriptInterface(content: string): TSInterface | null {
+  try {
+    // Extract main interface - handle the case where it ends with multiple }
+    const interfaceMatch = content.match(/export\s+interface\s+(\w+)\s*\{([\s\S]*?)(\n\}.*$)/m);
+    if (!interfaceMatch) return null;
+
+    const interfaceName = interfaceMatch[1];
+    const interfaceBody = interfaceMatch[2];
+
+    // For response interfaces, focus on the data field if it exists
+    const dataFieldRegex = /data\?\s*:\s*\{/m;
+    const dataFieldMatch = dataFieldRegex.exec(interfaceBody);
+
+    let fieldsToProcess = interfaceBody;
+    let isDataInterface = false;
+
+    if (dataFieldMatch) {
+      const openBraceIndex = interfaceBody.indexOf('{', dataFieldMatch.index);
+      if (openBraceIndex !== -1) {
+        const extracted = extractBalancedBlock(interfaceBody, openBraceIndex);
+        if (extracted) {
+          fieldsToProcess = extracted.content;
+          isDataInterface = true;
+          console.log('Found data field, processing nested interface...');
+        }
+      }
+    }
+
+    const fields = parseInterfaceFields(fieldsToProcess, content);
+
+    return {
+      name: isDataInterface ? `${interfaceName}_Data` : interfaceName,
+      fields,
+      isRoot: true
+    };
+  } catch (e) {
+    console.warn('Failed to parse TypeScript interface:', e);
+    return null;
+  }
+}
+
+function parseInterfaceFields(body: string, fullContent: string): TSField[] {
+  const fields: TSField[] = [];
+
+  // Enhanced parsing to handle complex multi-line nested structures
+  const lines = body.split('\n');
+
+  let currentField = '';
+  let currentComment = '';
+  let inMultiLineComment = false;
+  let inField = false;
+  let bracketDepth = 0;
+  let squareBracketDepth = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Skip empty lines
+    if (!trimmed) {
+      if (inField) {
+        currentField += '\n' + line; // Preserve empty lines in field definitions
+      }
+      continue;
+    }
+
+    // Handle multi-line comments
+    if (trimmed.includes('/**')) {
+      // If we're in a field, this might be a new comment for the next field
+      if (inField && bracketDepth > 0) {
+        currentField += '\n' + line;
+        continue;
+      }
+
+      inMultiLineComment = true;
+      currentComment = trimmed.replace('/**', '').replace(/^\*+\s*/, '').trim();
+      continue;
+    }
+
+    if (inMultiLineComment) {
+      if (trimmed.includes('*/')) {
+        const commentPart = trimmed.replace('*/', '').replace(/^\*+\s*/, '').trim();
+        if (commentPart) {
+          currentComment += (currentComment ? ' ' : '') + commentPart;
+        }
+        inMultiLineComment = false;
+      } else {
+        const commentText = trimmed.replace(/^\*+\s*/, '');
+        if (commentText) {
+          currentComment += (currentComment ? ' ' : '') + commentText;
+        }
+      }
+      continue;
+    }
+
+    // Skip comment lines that are not part of field definitions
+    if (trimmed.startsWith('//') || (trimmed.startsWith('*') && !trimmed.includes(':') && !inField)) {
+      continue;
+    }
+
+    // Check if this line starts a new field definition (has : and field name pattern)
+    const fieldStartMatch = trimmed.match(/^(\w+)(\?)?:\s*(.*)$/);
+
+    if (fieldStartMatch && !inField) {
+      console.log(`[KK Ajax Monitor] ✓ Detected field start: "${fieldStartMatch[1]}" from line: "${trimmed}"`);
+      // Start new field
+      inField = true;
+      currentField = line;
+
+      // Count brackets
+      bracketDepth = (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
+      squareBracketDepth = (line.match(/\[/g) || []).length - (line.match(/\]/g) || []).length;
+
+      console.log(`[KK Ajax Monitor] Starting field: ${fieldStartMatch[1]}, brackets: {${bracketDepth}, [${squareBracketDepth}]`);
+
+      // Check if field is immediately complete (simple field on one line)
+      if (bracketDepth === 0 && squareBracketDepth === 0 &&
+          (trimmed.endsWith(';') || trimmed.endsWith(','))) {
+        const field = parseField(currentField, currentComment, fullContent);
+        if (field) {
+          fields.push(field);
+          console.log(`[KK Ajax Monitor] Completed simple field: ${field.name}`);
+        }
+        currentField = '';
+        currentComment = '';
+        inField = false;
+      }
+    } else if (inField) {
+      // Continue collecting multi-line field definition
+      currentField += '\n' + line;
+
+      // Update bracket counts
+      bracketDepth += (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
+      squareBracketDepth += (line.match(/\[/g) || []).length - (line.match(/\]/g) || []).length;
+
+      console.log(`[KK Ajax Monitor] Continuing field, brackets: {${bracketDepth}, [${squareBracketDepth}], line: ${trimmed.substring(0, 50)}...`);
+
+      // Check if field is complete (balanced brackets and ends properly)
+      if (bracketDepth === 0 && squareBracketDepth === 0) {
+        // Look ahead to see if the next non-empty line starts a new field or we're at the end
+        let isFieldEnd = false;
+
+        if (trimmed.endsWith(';') || trimmed.endsWith(',')) {
+          isFieldEnd = true;
+          console.log(`[KK Ajax Monitor] Field ends with semicolon/comma: ${trimmed}`);
+        } else {
+          // Look ahead to see if next line starts a new field
+          console.log(`[KK Ajax Monitor] Looking ahead from line ${i + 1} to detect field end`);
+          for (let j = i + 1; j < lines.length; j++) {
+            const nextTrimmed = lines[j].trim();
+            console.log(`[KK Ajax Monitor] Checking line ${j}: "${nextTrimmed}"`);
+
+            if (!nextTrimmed || nextTrimmed.startsWith('*') || nextTrimmed.startsWith('//') || nextTrimmed.startsWith('/**')) {
+              console.log(`[KK Ajax Monitor] Skipping comment/empty line`);
+              continue;
+            }
+
+            // More comprehensive field start detection
+            const isFieldStart = nextTrimmed.match(/^(\w+)(\?)?:\s*/);
+            const isInterfaceEnd = nextTrimmed.startsWith('}');
+            const isIndexSignature = nextTrimmed === '[k: string]: any;';
+
+            if (isFieldStart || isInterfaceEnd || isIndexSignature) {
+              isFieldEnd = true;
+              console.log(`[KK Ajax Monitor] Detected field end due to: ${isFieldStart ? 'field start' : isInterfaceEnd ? 'interface end' : 'index signature'}`);
+              break;
+            } else if (nextTrimmed && !nextTrimmed.match(/^[\s\}\],;]*$/)) {
+              // If we find non-whitespace, non-bracket content that's not a field start, continue this field
+              console.log(`[KK Ajax Monitor] Found continuation content, not ending field: "${nextTrimmed}"`);
+              break;
+            }
+          }
+        }
+
+        if (isFieldEnd) {
+          const field = parseField(currentField, currentComment, fullContent);
+          if (field) {
+            fields.push(field);
+            console.log(`[KK Ajax Monitor] Completed complex field: ${field.name} (${field.type}${field.isArray ? '[]' : ''})`);
+          }
+          currentField = '';
+          currentComment = '';
+          inField = false;
+        }
+      }
+    } else if (fieldStartMatch && inField) {
+      // This suggests we missed the end of the previous field
+      console.warn(`[KK Ajax Monitor] ⚠ Found field start "${fieldStartMatch[1]}" while already parsing a field. Previous field might not have ended properly.`);
+      console.warn(`[KK Ajax Monitor] Current field name: ${currentField.split('\n')[0].trim().split(':')[0]}`)
+      console.warn(`[KK Ajax Monitor] Current field content (first 200 chars):`, currentField.substring(0, 200));
+      console.warn(`[KK Ajax Monitor] Bracket state: {${bracketDepth}, [${squareBracketDepth}]`);
+
+      // Force end the current field and start the new one
+      if (currentField) {
+        const field = parseField(currentField, currentComment, fullContent);
+        if (field) {
+          fields.push(field);
+          console.log(`[KK Ajax Monitor] ✓ Force-completed previous field: ${field.name}`);
+        } else {
+          console.warn(`[KK Ajax Monitor] ✗ Failed to parse previous field`);
+        }
+      }
+
+      // Start the new field
+      inField = true;
+      currentField = line;
+      currentComment = '';
+      bracketDepth = (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
+      squareBracketDepth = (line.match(/\[/g) || []).length - (line.match(/\]/g) || []).length;
+      console.log(`[KK Ajax Monitor] ✓ Starting new field after force-complete: ${fieldStartMatch[1]}, brackets: {${bracketDepth}, [${squareBracketDepth}]`);
+    }
+  }
+
+  // Handle case where we're still in a field at the end
+  if (inField && currentField) {
+    const field = parseField(currentField, currentComment, fullContent);
+    if (field) {
+      fields.push(field);
+      console.log(`[KK Ajax Monitor] Completed final field: ${field.name}`);
+    }
+  }
+
+  console.log(`[KK Ajax Monitor] parseInterfaceFields found ${fields.length} fields:`,
+              fields.map(f => `${f.name}: ${f.type}${f.isArray ? '[]' : ''}`));
+
+  return fields;
+}
+
+function parseField(fieldDef: string, comment: string, fullContent: string): TSField | null {
+  try {
+    // More robust field parsing for complex nested structures
+    const lines = fieldDef.split('\n');
+    const firstLine = lines[0].trim();
+
+    // Parse field: name?: type;
+    const match = firstLine.match(/(\w+)(\?)?:\s*(.*)/);
+    if (!match) return null;
+
+    const [, name, optional] = match;
+    const isOptional = !!optional;
+
+    let type = '';
+    let isArray = false;
+    let enumValues: (number | string)[] | undefined;
+    let nestedInterface: TSInterface | undefined;
+
+    // Determine type from the field definition
+    if (fieldDef.includes('{')) {
+      // This is a nested object type
+      type = 'object';
+
+      // Extract the content between the first { and last }
+      const openBraceIndex = fieldDef.indexOf('{');
+      const lastCloseBraceIndex = fieldDef.lastIndexOf('}');
+
+      if (openBraceIndex !== -1 && lastCloseBraceIndex !== -1 && lastCloseBraceIndex > openBraceIndex) {
+        const nestedContent = fieldDef.substring(openBraceIndex + 1, lastCloseBraceIndex);
+
+        // Check if it's an array of objects
+        if (fieldDef.includes('}[]') || fieldDef.includes('}[];')) {
+          isArray = true;
+        }
+
+        try {
+          nestedInterface = {
+            name: `${name}_nested`,
+            fields: parseInterfaceFields(nestedContent, fullContent),
+            isRoot: false
+          };
+
+          console.log(`[KK Ajax Monitor] Parsed nested interface for ${name}:`, nestedInterface.fields.length, 'fields');
+          nestedInterface.fields.forEach(f => console.log(`  - ${f.name}: ${f.type}${f.isArray ? '[]' : ''}`));
+        } catch (e) {
+          console.warn('Failed to parse nested interface for', name, e);
+        }
+      }
+    } else {
+      // Simple type - extract from first line
+      const typeMatch = firstLine.match(/:\s*([^;,\n]+)/);
+      if (typeMatch) {
+        type = typeMatch[1].trim();
+
+        // Handle array types
+        if (type.endsWith('[]')) {
+          isArray = true;
+          type = type.slice(0, -2).trim();
+        }
+      }
+    }
+
+    // Extract enum values from comments
+    if (comment) {
+      // Look for patterns like "1-启用、2-合并后启用" or "1-OEM、2-ODM"
+      const enumMatch = comment.match(/(\d+)-([^,，、]+)/g);
+      if (enumMatch) {
+        enumValues = [];
+        enumMatch.forEach(match => {
+          const parts = match.match(/(\d+)-(.+)/);
+          if (parts) {
+            enumValues!.push(parseInt(parts[1]));
+          }
+        });
+      }
+    }
+
+    // Default type if not determined
+    if (!type) {
+      type = 'string';
+    }
+
+    return {
+      name,
+      type,
+      isOptional,
+      isArray,
+      comment,
+      enumValues,
+      nestedInterface
+    };
+  } catch (e) {
+    console.warn('Failed to parse field:', fieldDef.substring(0, 100) + '...', e);
+    return null;
+  }
+}
+
+function generateMockDataFromInterface(tsInterface: TSInterface, count: number = 1): any {
+  // Generate a single data object based on the interface
+  const dataObject: Record<string, any> = {};
+
+  console.log(`[KK Ajax Monitor] Generating mock data for interface: ${tsInterface.name}`);
+  console.log(`[KK Ajax Monitor] Interface has ${tsInterface.fields.length} fields:`,
+              tsInterface.fields.map(f => `${f.name}${f.isOptional ? '?' : ''}: ${f.type}${f.isArray ? '[]' : ''}${f.nestedInterface ? ' (nested)' : ''}`));
+
+  tsInterface.fields.forEach(field => {
+    console.log(`[KK Ajax Monitor] Generating field: ${field.name} (${field.type}${field.isArray ? '[]' : ''})${field.nestedInterface ? ' - has nested interface with ' + field.nestedInterface.fields.length + ' fields' : ''}`);
+
+    // Generate value for all fields, including optional ones
+    const value = generateValueFromTSField(field, 0);
+    dataObject[field.name] = value;
+
+    console.log(`[KK Ajax Monitor] Generated ${field.name}:`, typeof value, Array.isArray(value) ? `array[${value.length}]` : value?.toString?.()?.substring(0, 100) || 'null');
+  });
+
+  console.log(`[KK Ajax Monitor] Final data object has ${Object.keys(dataObject).length} properties:`, Object.keys(dataObject));
+
+  // For response interfaces, generate the full response structure
+  if (tsInterface.name.includes('Response') || tsInterface.name.includes('_Data')) {
+    return {
+      success: true,
+      code: 200,
+      messageEn: "",
+      messageCn: "",
+      data: dataObject
+    };
+  }
+
+  // For non-response interfaces, return the data object directly
+  return dataObject;
+}
+
+function generateValueFromTSField(field: TSField, index: number): any {
+  const { name, type, isArray, comment, enumValues, nestedInterface } = field;
+
+  // Handle nested objects first
+  if (type === 'object' && nestedInterface) {
+    const nestedObj: Record<string, any> = {};
+    nestedInterface.fields.forEach(nestedField => {
+      nestedObj[nestedField.name] = generateValueFromTSField(nestedField, index);
+    });
+
+    if (isArray) {
+      // For arrays of objects
+      const count = Math.min(2, Math.max(1, (index % 2) + 1));
+      return Array.from({length: count}, (_, i) => {
+        const obj: Record<string, any> = {};
+        nestedInterface.fields.forEach(nestedField => {
+          obj[nestedField.name] = generateValueFromTSField(nestedField, i);
+        });
+        return obj;
+      });
+    }
+
+    return nestedObj;
+  }
+
+  // Handle enum values from comments
+  if (enumValues && enumValues.length > 0) {
+    if (isArray) {
+      const count = Math.min(2, Math.max(1, (index % 2) + 1));
+      return Array.from({length: count}, (_, i) => enumValues[(i + index) % enumValues.length]);
+    }
+    return enumValues[index % enumValues.length];
+  }
+
+  // Generate based on field name and type
+  const nameLower = name.toLowerCase();
+
+  let baseValue: any;
+
+  if (type === 'number') {
+    if (nameLower.includes('id')) {
+      baseValue = index + 1000;
+    } else if (nameLower.includes('time') || nameLower.includes('at')) {
+      baseValue = Date.now() - (Math.random() * 365 * 24 * 60 * 60 * 1000); // Random time in past year
+    } else if (nameLower.includes('count') || nameLower.includes('size') || nameLower.includes('area')) {
+      baseValue = Math.floor(Math.random() * 1000) + index * 10;
+    } else {
+      baseValue = index + 1;
+    }
+  } else if (type === 'string') {
+    if (nameLower.includes('name')) {
+      if (nameLower.includes('enterprise')) {
+        const companies = ['华为科技有限公司', '腾讯控股有限公司', '阿里巴巴集团', '百度在线网络技术', '京东数科控股'];
+        baseValue = companies[index % companies.length];
+      } else if (nameLower.includes('country')) {
+        const countries = ['中国', '美国', '德国', '日本', '韩国'];
+        baseValue = countries[index % countries.length];
+      } else {
+        baseValue = `${name}-${index + 1}`;
+      }
+    } else if (nameLower.includes('code')) {
+      if (nameLower.includes('social') || nameLower.includes('credit')) {
+        baseValue = `91${Math.random().toString().slice(2, 8)}${String(index).padStart(8, '0')}0${String(Math.floor(Math.random() * 10))}`;
+      } else {
+        baseValue = `CODE${Math.random().toString(36).slice(2, 8).toUpperCase()}${String(index).padStart(3, '0')}`;
+      }
+    } else if (nameLower.includes('address')) {
+      const addresses = ['深圳市南山区科技园', '北京市朝阳区CBD', '上海市浦东新区张江', '广州市天河区珠江新城'];
+      baseValue = addresses[index % addresses.length];
+    } else if (nameLower.includes('email')) {
+      baseValue = `user${index + 1}@example.com`;
+    } else if (nameLower.includes('phone')) {
+      baseValue = `138${String(Math.floor(Math.random() * 100000000)).padStart(8, '0')}`;
+    } else if (nameLower.includes('business')) {
+      const businesses = ['纺织服装', '电子产品', '机械制造', '化工材料', '食品饮料', '建材家居'];
+      baseValue = businesses[index % businesses.length];
+    } else {
+      baseValue = `${name}-${index + 1}`;
+    }
+  } else if (type === 'boolean') {
+    baseValue = Math.random() > 0.5;
+  } else {
+    // Default string value
+    baseValue = `${name}-${index + 1}`;
+  }
+
+  // Handle arrays
+  if (isArray) {
+    if (type === 'string') {
+      if (nameLower.includes('business') || nameLower.includes('image')) {
+        const count = Math.min(3, Math.max(1, (index % 3) + 1));
+        return Array.from({length: count}, (_, i) => `${baseValue}-${i + 1}`);
+      }
+    }
+    const count = Math.min(3, Math.max(1, (index % 3) + 1));
+    return Array.from({length: count}, () => baseValue);
+  }
+
+  return baseValue;
+}
+
+// Legacy function for backward compatibility
 function mockValue(field: string, i: number): any {
-  const lower = field.toLowerCase()
-  if (lower.includes('id')) return `ID-${i.toString().padStart(4, '0')}`
-  if (lower.includes('name')) return `名称-${i}`
-  if (lower.includes('code')) return `CODE-${Math.random().toString(36).slice(2, 10)}`
-  if (lower.includes('date') || lower.includes('time')) return `2025-08-${String(i).padStart(2, '0')}`
-  if (lower.includes('location')) return `地区-${i}`
-  if (lower.includes('status')) return ['正常', '关闭', '异常'][i % 3]
-  if (lower.includes('count')) return Math.floor(Math.random() * 10)
-  if (lower.startsWith('is') || lower.startsWith('has')) return Math.random() > 0.5
-  if (lower.includes('store') || lower.includes('product')) return [`示例-${i}`, `样例-${i + 1}`]
-  return `值-${i}`
+  const columnInfo = analyzeColumn(`dataIndex: '${field}'`);
+  return generateMockValue(columnInfo, i - 1);
 }
 
 // @ts-ignore
@@ -120,6 +892,7 @@ const App = () => {
     []
   );
   const [columnsInput, setColumnsInput] = useState('');
+  const [contentType, setContentType] = useState<ContentType>('unknown');
 
   const tableBoxRef = useRef<HTMLDivElement>(null);
 
@@ -151,24 +924,14 @@ const App = () => {
       (result) => {
         setSwitchOn(result.ajaxInterceptor_switchOn || false);
 
-        // Initialize default rule if no rules exist
+        // Only load existing rules, don't create empty default rule
         if (
-          !result.ajaxInterceptor_rules ||
-          result.ajaxInterceptor_rules.length === 0
+          result.ajaxInterceptor_rules &&
+          result.ajaxInterceptor_rules.length > 0
         ) {
-          const defaultRule: AjaxInterceptorRule = {
-            id: generateUniqueId(),
-            match: "",
-            label: "Default Rule",
-            switchOn: true,
-            key: buildUUID(),
-            tabId: "Default",
-          };
-          const defaultRules = [defaultRule];
-          setRules(defaultRules);
-          // set('ajaxInterceptor_rules', defaultRules);
-        } else {
           setRules(result.ajaxInterceptor_rules);
+        } else {
+          setRules([]);
         }
 
         setCustomFunction(result.customFunction || { panelPosition: 0 });
@@ -428,7 +1191,7 @@ const App = () => {
     const newRule: AjaxInterceptorRule = {
       id: generateUniqueId(),
       match: "",
-      label: `url${rules.length + 1}`,
+      label: `New Rule ${rules.length + 1}`,
       switchOn: true,
       key: buildUUID(),
       tabId: "Default",
@@ -441,7 +1204,7 @@ const App = () => {
     const newRule: AjaxInterceptorRule = {
       id: generateUniqueId(),
       match: "",
-      label: `url${rules.length + 1}`,
+      label: `New Rule ${rules.length + 1}`,
       switchOn: true,
       key: buildUUID(),
       tabId: tabId,
@@ -808,7 +1571,7 @@ const App = () => {
           <Button
             type="text"
             danger
-            onClick={() => handleClickRemove(text, record.id)}
+            onClick={(e) => handleClickRemove(e, record.id)}
             icon={<DeleteOutlined />}
           />
         </Space>
@@ -827,6 +1590,17 @@ const App = () => {
   };
   const handleUpdateRules = () => {
     if (currentEditRule) {
+      // Validate rule before saving
+      if (!currentEditRule.match || currentEditRule.match.trim() === "") {
+        message.error("Match pattern is required and cannot be empty");
+        return;
+      }
+
+      if (!currentEditRule.label || currentEditRule.label.trim() === "") {
+        message.error("Label is required and cannot be empty");
+        return;
+      }
+
       readRulesFromStorage().then((rules) => {
         const index = (rules as any).findIndex(
           (rule) => rule.id === currentEditRule.id
@@ -841,25 +1615,152 @@ const App = () => {
         setRules(newRules);
         set("ajaxInterceptor_rules", newRules);
         setShowDetail(false);
+        setIsCreating(false);
       });
     }
   };
 
   const handleGenerateMockData = () => {
     try {
-      const matches = columnsInput.match(/dataIndex\s*:\s*['"`](\w+)['"`]/g)
-      if (!matches) throw new Error('无法提取字段，请确认格式中含有 dataIndex')
+      // Parse the entire columns array instead of just extracting dataIndex
+      const columnsText = columnsInput.trim();
 
-      const fields = matches.map((line) => line.match(/['"`](\w+)['"`]/)?.[1] || '')
+      // Handle TypeScript interfaces
+      if (contentType === 'typescript') {
+        const parsedInterface = parseTypeScriptInterface(columnsText);
+        if (parsedInterface) {
+          console.log('Parsed TypeScript interface:', parsedInterface);
+          const mockData = generateMockDataFromInterface(parsedInterface);
+          console.log('Generated mock data from interface:', mockData);
 
+          if (currentEditRule) {
+            setCurrentEditRule({ ...currentEditRule, overrideTxt: JSON.stringify(mockData, null, 2) });
+          }
+          return;
+        } else {
+          throw new Error('无法解析 TypeScript 接口，请检查格式');
+        }
+      }
+
+      // More sophisticated column parsing to handle nested objects in render functions
+      const columnMatches: string[] = [];
+      let depth = 0;
+      let currentColumn = '';
+      let inColumn = false;
+
+      for (let i = 0; i < columnsText.length; i++) {
+        const char = columnsText[i];
+
+        if (char === '{') {
+          if (!inColumn && columnsText.substr(i).includes('dataIndex')) {
+            inColumn = true;
+            currentColumn = '{';
+            depth = 1;
+          } else if (inColumn) {
+            currentColumn += char;
+            depth++;
+          }
+        } else if (char === '}' && inColumn) {
+          currentColumn += char;
+          depth--;
+          if (depth === 0) {
+            columnMatches.push(currentColumn);
+            inColumn = false;
+            currentColumn = '';
+          }
+        } else if (inColumn) {
+          currentColumn += char;
+        }
+      }
+
+      if (columnMatches.length === 0) {
+        // Fallback to simple dataIndex extraction
+        const simpleMatches = columnsText.match(/dataIndex\s*:\s*['"`](\w+)['"`]/g);
+        if (!simpleMatches) throw new Error('无法提取字段，请确认格式中含有 dataIndex');
+
+        const fields = simpleMatches.map((line) => line.match(/['"`](\w+)['"`]/)?.[1] || '');
+
+        const mockContent = Array.from({ length: 10 }, (_, i) => {
+          const obj: Record<string, any> = {
+            uuid: `uuid-${crypto.randomUUID()}`,
+          };
+          fields.forEach((field) => {
+            obj[field] = mockValue(field, i + 1);
+          });
+          return obj;
+        });
+
+        // Continue with existing structure...
+        const mockData = {
+          code: 200,
+          data: {
+            content: mockContent,
+            pageNumber: "1",
+            pageSize: "10",
+            totalPages: "27",
+            totalRecords: "266"
+          },
+          messageCn: "",
+          messageEn: "",
+          success: true
+        };
+
+        console.log('Generated mock data:', mockData);
+        if (currentEditRule) {
+          setCurrentEditRule({ ...currentEditRule, overrideTxt: JSON.stringify(mockData, null, 2) });
+        }
+        return;
+      }
+
+      // Enhanced analysis for full column definitions
+      console.log(`Analyzing ${columnMatches.length} column definitions...`);
+
+      const analyzedColumns: ColumnInfo[] = [];
+      columnMatches.forEach((columnText, index) => {
+        try {
+          const columnInfo = analyzeColumn(columnText);
+          if (columnInfo.dataIndex) {
+            analyzedColumns.push(columnInfo);
+            console.log(`Column ${index + 1}: ${columnInfo.dataIndex} -> ${columnInfo.detectedType}`,
+                       columnInfo.mappedValues ? `(mapped: ${Object.keys(columnInfo.mappedValues).length} values)` : '');
+          }
+        } catch (e) {
+          console.warn(`Failed to analyze column ${index + 1}:`, e);
+        }
+      });
+
+      if (analyzedColumns.length === 0) {
+        throw new Error('无法分析任何列定义，请检查格式');
+      }
+
+      // Generate mock data with enhanced analysis
       const mockContent = Array.from({ length: 10 }, (_, i) => {
         const obj: Record<string, any> = {
           uuid: `uuid-${crypto.randomUUID()}`,
-        }
-        fields.forEach((field) => {
-          obj[field] = mockValue(field, i + 1)
-        })
-        return obj
+        };
+
+        analyzedColumns.forEach((columnInfo) => {
+          const value = generateMockValue(columnInfo, i);
+          obj[columnInfo.dataIndex] = value;
+
+          // For location fields, also generate the individual location components
+          if (columnInfo.dataIndex === 'location' && columnInfo.detectedType === 'location') {
+            const countries = ['中国', '美国', '德国', '日本'];
+            const provinces = ['广东省', '江苏省', '浙江省', '北京市', '上海市'];
+            const cities = ['深圳市', '苏州市', '杭州市', '朝阳区', '浦东新区'];
+
+            obj.countryName = countries[i % countries.length];
+            obj.province = provinces[i % provinces.length];
+            obj.city = cities[i % cities.length];
+          }
+
+          // For mapped fields with isMerge logic, add the isMerge field
+          if (columnInfo.render && columnInfo.render.includes('isMerge === 2')) {
+            obj.isMerge = [1, 2, 3][i % 3];
+          }
+        });
+
+        return obj;
       })
 
       // Wrap the generated data in the new structure
@@ -1292,13 +2193,27 @@ const App = () => {
                       <Typography.Title level={4}>Generate Mock Data:</Typography.Title>
                       <Input.TextArea
                         rows={6}
-                        placeholder="粘贴 columns 数组（包含 dataIndex）"
+                        placeholder="粘贴 columns 数组（包含 dataIndex）或 TypeScript 接口"
                         value={columnsInput}
-                        onChange={(e) => setColumnsInput(e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setColumnsInput(value);
+                          setContentType(detectContentType(value));
+                        }}
                         style={{
-                          marginBottom: "10px",
+                          marginBottom: "4px",
                         }}
                       />
+                      <div style={{
+                        fontSize: "12px",
+                        color: "#666",
+                        marginBottom: "10px",
+                        minHeight: "16px"
+                      }}>
+                        {contentType === 'typescript' && "🔍 检测到 TypeScript 接口 - 将解析类型信息和注释"}
+                        {contentType === 'columns' && "🔍 检测到 Ant Design 列配置 - 将分析 render 函数"}
+                        {contentType === 'unknown' && columnsInput.trim() && "⚠️ 未识别的格式 - 请粘贴 columns 数组或 TypeScript 接口"}
+                      </div>
                       <Button
                         type="primary"
                         icon={<ToolFilled />}
