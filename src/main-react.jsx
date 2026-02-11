@@ -158,6 +158,9 @@ let ajax_interceptor = {
   },
   // 获取匹配到的规则项
   getMatchedInterface: ({ thisRequestUrl = "", thisMethod = "" }) => {
+    const normalizedUrl = thisRequestUrl || "";
+    const normalizedMethod = (thisMethod || "GET").toUpperCase();
+
     return ajax_interceptor.settings.ajaxInterceptor_rules.find((item) => {
       let {
         filterType = "normal",
@@ -165,13 +168,31 @@ let ajax_interceptor = {
         switchOn = true,
         match,
       } = item;
-      // remove \n if match has it in the end
-      match = match?.replace(/\n$/, "");
-      const matchedMethod = thisMethod === limitMethod || limitMethod === "ALL";
-      const matchedRequest =
-        (filterType === "normal" && thisRequestUrl === match) ||
-        (filterType === "regex" &&
-          thisRequestUrl.match(new RegExp(match, "i")));
+      const normalizedLimitMethod = (limitMethod || "ALL").toUpperCase();
+
+      // remove \n if match has it in the end and trim whitespace to avoid accidental mismatches
+      match = match?.replace(/\n$/, "")?.trim();
+
+      // Empty match should not trigger interception
+      if (!match) {
+        return false;
+      }
+
+      const matchedMethod =
+        normalizedMethod === normalizedLimitMethod || normalizedLimitMethod === "ALL";
+
+      let matchedRequest = false;
+      if (filterType === "normal") {
+        // Support exact or partial match to make rule matching more forgiving
+        matchedRequest = normalizedUrl === match || normalizedUrl.includes(match);
+      } else if (filterType === "regex") {
+        try {
+          matchedRequest = new RegExp(match, "i").test(normalizedUrl);
+        } catch (e) {
+          console.warn("[KK Ajax Monitor] Invalid regex pattern:", match, e);
+          matchedRequest = false;
+        }
+      }
       return switchOn && matchedMethod && matchedRequest;
     });
   },
@@ -339,11 +360,19 @@ let ajax_interceptor = {
         self.open = (...args) => {
           self._openArgs = args;
           const [method, requestUrl] = args;
+          const normalizedMethod = (method || "GET").toUpperCase();
+          const completeUrl = ajax_interceptor.getCompleteUrl(requestUrl);
           self._matchedInterface = ajax_interceptor.getMatchedInterface({
-            thisRequestUrl: ajax_interceptor.getCompleteUrl(requestUrl),
-            thisMethod: method,
+            thisRequestUrl: completeUrl,
+            thisMethod: normalizedMethod,
           });
           const matchedInterface = self._matchedInterface;
+          console.log('[KK Ajax Monitor] Intercepted network request', {
+            type: 'XHR',
+            method: normalizedMethod,
+            url: completeUrl,
+            matched: !!matchedInterface,
+          });
           // modify request
           if (matchedInterface) {
             const { overridePayloadFunc, isExpert = false } = matchedInterface;
@@ -478,16 +507,24 @@ let ajax_interceptor = {
       inputUrl = requestUrl.url || "";
     }
 
+    const normalizedFetchMethod = (data && data.method ? data.method : "GET").toUpperCase();
+    const completeUrl = ajax_interceptor.getCompleteUrl(inputUrl);
     const matchedInterface = ajax_interceptor.getMatchedInterface({
-      thisRequestUrl: ajax_interceptor.getCompleteUrl(inputUrl),
-      thisMethod: data && data.method,
+      thisRequestUrl: completeUrl,
+      thisMethod: normalizedFetchMethod,
+    });
+    console.log('[KK Ajax Monitor] Intercepted network request', {
+      type: 'fetch',
+      method: normalizedFetchMethod,
+      url: completeUrl,
+      matched: !!matchedInterface,
     });
     if (matchedInterface && args) {
       // Use enhanced monitoring system
       ajaxMonitoringSystem.addInterceptedRequest(
         matchedInterface,
-        inputUrl,
-        data && data.method || 'GET'
+        completeUrl,
+        normalizedFetchMethod
       );
       const {
         overrideHeadersFunc,
@@ -504,7 +541,8 @@ let ajax_interceptor = {
       }
       if (overridePayloadFunc && isExpert && args[0] && args[1]) {
         const { method } = args[1];
-        if (["GET", "HEAD"].includes(method.toUpperCase())) {
+        const normalizedMethod = (method || "GET").toUpperCase();
+        if (["GET", "HEAD"].includes(normalizedMethod)) {
           const queryParams = ajax_interceptor.getRequestParams(args[0]);
           const data = {
             requestUrl: args[0],
@@ -753,6 +791,36 @@ const initializeFloatingUI = () => {
 // Update function to refresh the React UI
 const updateFloatingUI = initializeFloatingUI();
 
+let interceptionMonitorTimer = null;
+const ensureInterceptionIntegrity = () => {
+  if (!ajax_interceptor.settings.ajaxInterceptor_switchOn) {
+    return;
+  }
+  let rePatched = false;
+  if (window.fetch !== ajax_interceptor.myFetch) {
+    window.fetch = ajax_interceptor.myFetch;
+    rePatched = true;
+  }
+  if (window.XMLHttpRequest !== ajax_interceptor.myXHR) {
+    window.XMLHttpRequest = ajax_interceptor.myXHR;
+    rePatched = true;
+  }
+  if (rePatched) {
+    console.log("[KK Ajax Monitor] Detected external override, re-applying interception");
+  }
+};
+
+const startInterceptionMonitor = () => {
+  if (interceptionMonitorTimer) return;
+  interceptionMonitorTimer = window.setInterval(ensureInterceptionIntegrity, 2000);
+};
+
+const stopInterceptionMonitor = () => {
+  if (!interceptionMonitorTimer) return;
+  clearInterval(interceptionMonitorTimer);
+  interceptionMonitorTimer = null;
+};
+
 // Initialize AJAX interceptor
 const initializeAjaxInterceptor = () => {
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
@@ -762,20 +830,22 @@ const initializeAjaxInterceptor = () => {
         ajax_interceptor.settings.ajaxInterceptor_switchOn = switchOn;
         if (switchOn) {
           setTimeout(() => {
-            if (
-              window.XMLHttpRequest.name.includes("Xhook") ||
-              window.fetch.name.includes("Xhook")
-            ) {
-              window.XMLHttpRequest = ajax_interceptor.myXHR;
-              window.fetch = ajax_interceptor.myFetch;
-            }
-          }, 0);
-        } else {
-          window.XMLHttpRequest = ajax_interceptor.originalXHR;
-          window.fetch = ajax_interceptor.originalFetch;
-        }
-        updateFloatingUI();
+          if (
+            window.XMLHttpRequest.name.includes("Xhook") ||
+            window.fetch.name.includes("Xhook")
+          ) {
+            window.XMLHttpRequest = ajax_interceptor.myXHR;
+            window.fetch = ajax_interceptor.myFetch;
+          }
+        }, 0);
+        startInterceptionMonitor();
+      } else {
+        window.XMLHttpRequest = ajax_interceptor.originalXHR;
+        window.fetch = ajax_interceptor.originalFetch;
+        stopInterceptionMonitor();
       }
+      updateFloatingUI();
+    }
 
       if (namespace === "local" && changes.ajaxInterceptor_rules) {
         ajax_interceptor.settings.ajaxInterceptor_rules = changes.ajaxInterceptor_rules.newValue;
@@ -798,10 +868,12 @@ const initializeAjaxInterceptor = () => {
             window.fetch = ajax_interceptor.myFetch;
           }
         }, 0);
+        startInterceptionMonitor();
       } else {
         ajaxMonitoringSystem.clear();
         window.XMLHttpRequest = ajax_interceptor.originalXHR;
         window.fetch = ajax_interceptor.originalFetch;
+        stopInterceptionMonitor();
       }
 
       updateFloatingUI();
@@ -812,6 +884,7 @@ const initializeAjaxInterceptor = () => {
 // Set up the interceptors
 window.XMLHttpRequest = ajax_interceptor.myXHR;
 window.fetch = ajax_interceptor.myFetch;
+startInterceptionMonitor();
 
 window.onload = () => {
   initializeAjaxInterceptor();

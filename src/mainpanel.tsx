@@ -887,6 +887,7 @@ const App = () => {
 
   const [switchOn, setSwitchOn] = useState(false);
   const [rules, setRules] = useState<AjaxInterceptorRule[]>([]);
+  const [filteredRules, setFilteredRules] = useState<AjaxInterceptorRule[] | null>(null);
   const [dataList, setDataList] = useState<DataList>({});
   const [duplicateMatch, setDuplicateMatch] = useState<AjaxInterceptorRule[]>(
     []
@@ -952,7 +953,8 @@ const App = () => {
   }, []);
 
   const groupRulesByTab = useCallback(() => {
-    const groupedRules = rules.reduce((acc, rule) => {
+    const listToGroup = filteredRules ?? rules;
+    const groupedRules = listToGroup.reduce((acc, rule) => {
       const tab = rule.tabId || "Default";
       if (!acc[tab]) {
         acc[tab] = [];
@@ -972,11 +974,11 @@ const App = () => {
       const firstTabId = Object.keys(groupedRules)[0];
       setActiveKey(firstTabId);
     }
-  }, [rules, activeKey]);
+  }, [rules, filteredRules, activeKey]);
 
   useEffect(() => {
     groupRulesByTab();
-  }, [rules, groupRulesByTab]);
+  }, [rules, filteredRules, groupRulesByTab]);
 
   const setupMessageListener = () => {
     chrome.runtime.onMessage.addListener(handleIncomingMessage);
@@ -1110,6 +1112,8 @@ const App = () => {
     });
   };
 
+  const displayedRules = filteredRules ?? rules;
+
   const handleExportRules = () => {
     const rulesForExport = rules.map((rule) => ({
       ...rule,
@@ -1136,24 +1140,17 @@ const App = () => {
   };
 
   useEffect(() => {
-    console.log("searchName", searchName);
-    console.log("searchUrl", searchUrl);
     if (searchName || searchUrl) {
-      setRules((prevRules) => {
-        const newRules = prevRules.filter((rule) => {
-          return (
-            rule.label.includes(searchName) && rule.match.includes(searchUrl)
-          );
-        });
-        console.log("newRules", newRules);
-        return newRules;
+      const filtered = rules.filter((rule) => {
+        return (
+          rule.label.includes(searchName) && rule.match.includes(searchUrl)
+        );
       });
+      setFilteredRules(filtered);
     } else {
-      readRulesFromStorage().then((rules) => {
-        setRules(rules as any);
-      });
+      setFilteredRules(null);
     }
-  }, [searchName, searchUrl]);
+  }, [searchName, searchUrl, rules]);
 
   const handleFilterTypeChange = (val, ruleId) => {
     setRules((prevRules) => {
@@ -1993,7 +1990,7 @@ const App = () => {
                 bordered
                 pagination={{
                   pageSize: 20,
-                  total: rules.length,
+                  total: displayedRules.length,
                   showTotal: (total, range) => `Total: ${total}`,
                   showSizeChanger: true,
                 }}
@@ -2004,7 +2001,7 @@ const App = () => {
                 scroll={{ y: tableBoxHeight - 78 }}
                 size="small"
                 columns={tableColumns}
-                dataSource={rules}
+                dataSource={displayedRules}
               />
             </motion.div>
             <Drawer

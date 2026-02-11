@@ -9,6 +9,8 @@ let ajax_interceptor = {
   },
   // 获取匹配到的规则项
   getMatchedInterface: ({ thisRequestUrl = "", thisMethod = "" }) => {
+    const normalizedUrl = thisRequestUrl || "";
+    const normalizedMethod = (thisMethod || "GET").toUpperCase();
     console.log('[KK Ajax Monitor] Checking rules for URL:', thisRequestUrl, 'Method:', thisMethod);
     console.log('[KK Ajax Monitor] Available rules:', ajax_interceptor.settings.ajaxInterceptor_rules.length);
 
@@ -19,13 +21,29 @@ let ajax_interceptor = {
         switchOn = true,
         match,
       } = item;
-      // remove \n if match has it in the end
-      match = match?.replace(/\n$/, "");
-      const matchedMethod = thisMethod === limitMethod || limitMethod === "ALL";
-      const matchedRequest =
-        (filterType === "normal" && thisRequestUrl === match) ||
-        (filterType === "regex" &&
-          thisRequestUrl.match(new RegExp(match, "i")));
+      const normalizedLimitMethod = (limitMethod || "ALL").toUpperCase();
+      // remove \n if match has it in the end and trim whitespace to avoid accidental mismatches
+      match = match?.replace(/\n$/, "")?.trim();
+
+      // Empty match should not trigger interception
+      if (!match) {
+        return false;
+      }
+
+      const matchedMethod = normalizedMethod === normalizedLimitMethod || normalizedLimitMethod === "ALL";
+
+      let matchedRequest = false;
+      if (filterType === "normal") {
+        // 支持完整匹配或部分匹配，确保填写路径片段时也能拦截
+        matchedRequest = normalizedUrl === match || normalizedUrl.includes(match);
+      } else if (filterType === "regex") {
+        try {
+          matchedRequest = new RegExp(match, "i").test(normalizedUrl);
+        } catch (e) {
+          console.warn("[KK Ajax Monitor] Invalid regex pattern:", match, e);
+          matchedRequest = false;
+        }
+      }
 
       console.log(`[KK Ajax Monitor] Rule ${index}:`, {
         match: match,
@@ -204,11 +222,16 @@ let ajax_interceptor = {
         self.open = (...args) => {
           self._openArgs = args;
           const [method, requestUrl] = args;
+          const normalizedMethod = (method || "GET").toUpperCase();
+          args[0] = normalizedMethod;
+          const completeUrl = ajax_interceptor.getCompleteUrl(requestUrl);
+          self._openArgs = [normalizedMethod, requestUrl, ...args.slice(2)];
           self._matchedInterface = ajax_interceptor.getMatchedInterface({
-            thisRequestUrl: ajax_interceptor.getCompleteUrl(requestUrl),
-            thisMethod: method,
+            thisRequestUrl: completeUrl,
+            thisMethod: normalizedMethod,
           });
           const matchedInterface = self._matchedInterface;
+          console.log('[KK Ajax Monitor] XHR request:', normalizedMethod, completeUrl, 'Matched rule:', !!matchedInterface);
           // modify request
           if (matchedInterface) {
             const { overridePayloadFunc, isExpert = false } = matchedInterface;
@@ -345,11 +368,13 @@ let ajax_interceptor = {
       inputUrl = requestUrl.url || "";
     }
 
+    const normalizedFetchMethod = (data && data.method ? data.method : "GET").toUpperCase();
+    const completeUrl = ajax_interceptor.getCompleteUrl(inputUrl);
     const matchedInterface = ajax_interceptor.getMatchedInterface({
-      thisRequestUrl: ajax_interceptor.getCompleteUrl(inputUrl),
-      thisMethod: data && data.method,
+      thisRequestUrl: completeUrl,
+      thisMethod: normalizedFetchMethod,
     });
-    console.log('[KK Ajax Monitor] Fetch URL:', ajax_interceptor.getCompleteUrl(inputUrl), 'Method:', data && data.method, 'Matched:', !!matchedInterface);
+    console.log('[KK Ajax Monitor] Fetch request:', normalizedFetchMethod, completeUrl, 'Matched rule:', !!matchedInterface);
     if (matchedInterface && args) {
       AJAX_MODIFIER_KK_PANEL_DATA.push(matchedInterface);
       updateFloatPanelContent();
@@ -368,7 +393,8 @@ let ajax_interceptor = {
       }
       if (overridePayloadFunc && isExpert && args[0] && args[1]) {
         const { method } = args[1];
-        if (["GET", "HEAD"].includes(method.toUpperCase())) {
+        const normalizedMethod = (method || "GET").toUpperCase();
+        if (["GET", "HEAD"].includes(normalizedMethod)) {
           const queryParams = ajax_interceptor.getRequestParams(args[0]);
           const data = {
             requestUrl: args[0],
@@ -424,10 +450,14 @@ let ajax_interceptor = {
           }
         } else if (overrideResponseFunc && isExpert) {
           // 专业模式，用函数替换
-          const queryParams = ajax_interceptor.getRequestParams(requestUrl);
+          const safeRequestUrl =
+            typeof requestUrl === "string"
+              ? requestUrl
+              : requestUrl?.url || "";
+          const queryParams = ajax_interceptor.getRequestParams(safeRequestUrl);
           const orgResponse = await getOriginalResponse(response.clone().body);
           const funcArgs = {
-            method: data?.method,
+            method: normalizedFetchMethod,
             payload: {
               queryParams,
               requestPayload: data?.body,
@@ -1116,13 +1146,65 @@ const createFloatPanel = () => {
 
 // Manage swapping between native and intercepted implementations
 let interceptionApplied = false;
+let interceptionMonitorTimer = null;
+const logInterceptionState = (reason = "") => {
+  try {
+    console.log("[KK Ajax Monitor] Interception state", {
+      reason,
+      switchOn: ajax_interceptor.settings.ajaxInterceptor_switchOn,
+      rulesCount: ajax_interceptor.settings.ajaxInterceptor_rules?.length || 0,
+      interceptionApplied,
+      fetchPatched: window.fetch === ajax_interceptor.myFetch,
+      xhrPatched: window.XMLHttpRequest === ajax_interceptor.myXHR,
+    });
+  } catch (e) {
+    // Swallow logging errors to avoid breaking page
+  }
+};
+
+const ensureInterceptionIntegrity = () => {
+  console.log('[KK Monitor Checking]', {...ajax_interceptor})
+  if (!ajax_interceptor.settings.ajaxInterceptor_switchOn) {
+    return;
+  }
+  let rePatched = false;
+  if (window.fetch !== ajax_interceptor.myFetch) {
+    window.fetch = ajax_interceptor.myFetch;
+    rePatched = true;
+  }
+  if (window.XMLHttpRequest !== ajax_interceptor.myXHR) {
+    window.XMLHttpRequest = ajax_interceptor.myXHR;
+    rePatched = true;
+  }
+  if (rePatched) {
+    console.log("[KK Ajax Monitor] Detected external override, re-applying interception");
+    logInterceptionState("after reapply integrity check");
+  }
+};
+
+const startInterceptionMonitor = () => {
+  if (interceptionMonitorTimer) return;
+  interceptionMonitorTimer = window.setInterval(ensureInterceptionIntegrity, 2000);
+};
+
+const stopInterceptionMonitor = () => {
+  if (!interceptionMonitorTimer) return;
+  clearInterval(interceptionMonitorTimer);
+  interceptionMonitorTimer = null;
+};
+
 const applyInterception = (enable) => {
+  console.log("[KK Ajax Monitor] applyInterception called", { enable });
   if (enable) {
     if (!interceptionApplied) {
       console.log('[KK Ajax Monitor] Applying interception');
       window.XMLHttpRequest = ajax_interceptor.myXHR;
       window.fetch = ajax_interceptor.myFetch;
       interceptionApplied = true;
+      startInterceptionMonitor();
+    } else {
+      console.log('[KK Ajax Monitor] Interception already applied, skipping');
+      startInterceptionMonitor();
     }
   } else {
     if (interceptionApplied) {
@@ -1130,8 +1212,13 @@ const applyInterception = (enable) => {
       window.XMLHttpRequest = ajax_interceptor.originalXHR;
       window.fetch = ajax_interceptor.originalFetch;
       interceptionApplied = false;
+      stopInterceptionMonitor();
+    } else {
+      console.log('[KK Ajax Monitor] Interception already off, skipping');
+      stopInterceptionMonitor();
     }
   }
+  logInterceptionState("after applyInterception");
 };
 
 // Sync switch status from storage on page load
@@ -1153,27 +1240,38 @@ const initializeAjaxInterceptor = () => {
       }
     });
 
-    // Initial state check
-    chrome.storage.local.get(["ajaxInterceptor_switchOn", "ajaxInterceptor_rules"], (result) => {
-      const switchOn = result.ajaxInterceptor_switchOn;
-      ajax_interceptor.settings.ajaxInterceptor_switchOn = switchOn;
-      ajax_interceptor.settings.ajaxInterceptor_rules = result.ajaxInterceptor_rules || [];
-      console.log('[KK Ajax Monitor] Initial load - Switch:', switchOn, 'Rules:', ajax_interceptor.settings.ajaxInterceptor_rules.length);
+  // Initial state check
+  chrome.storage.local.get(["ajaxInterceptor_switchOn", "ajaxInterceptor_rules"], (result) => {
+    const switchOn = result.ajaxInterceptor_switchOn;
+    ajax_interceptor.settings.ajaxInterceptor_switchOn = switchOn;
+    ajax_interceptor.settings.ajaxInterceptor_rules = result.ajaxInterceptor_rules || [];
+    console.log('[KK Ajax Monitor] Initial load - Switch:', switchOn, 'Rules:', ajax_interceptor.settings.ajaxInterceptor_rules.length);
+    logInterceptionState("after initial chrome.storage.local.get");
 
-      applyInterception(!!switchOn);
+    applyInterception(!!switchOn);
 
-      // Check if button should be shown for current site
-      updateButtonVisibility();
+    // Check if button should be shown for current site
+    updateButtonVisibility();
     });
   }
 };
 
-window.onload = () => {
-  console.log('[KK Ajax Monitor] Window loaded, initializing...');
-  // Ensure we start with native implementations until storage says otherwise
+// Initialize as soon as possible to avoid missing early requests
+let interceptorInitialized = false;
+const startAjaxInterceptor = () => {
+  if (interceptorInitialized) return;
+  interceptorInitialized = true;
+  console.log('[KK Ajax Monitor] Starting interceptor bootstrap');
+  logInterceptionState("before bootstrap applyInterception(false)");
   applyInterception(false);
   initializeAjaxInterceptor();
 };
+
+if (document.readyState === "complete" || document.readyState === "interactive") {
+  startAjaxInterceptor();
+} else {
+  document.addEventListener("DOMContentLoaded", startAjaxInterceptor, { once: true });
+}
 
 // Function to check if current website should show the button
 const shouldShowButtonForCurrentSite = () => {
@@ -1233,8 +1331,17 @@ window.addEventListener(
     const data = event.data;
 
     if (data.type === "ajaxInterceptor" && data.to === "pageScript") {
+      console.log("[KK Ajax Monitor] Message from extension", data);
       ajax_interceptor.settings[data.key] = data.value;
+
+      // Keep interception state in sync even when running in page context without chrome APIs
+      if (data.key === "ajaxInterceptor_switchOn") {
+        applyInterception(!!data.value);
+        logInterceptionState("message toggle switchOn");
+      }
+
       updateButtonVisibility();
+      logInterceptionState("after message updateButtonVisibility");
     }
   },
   false
